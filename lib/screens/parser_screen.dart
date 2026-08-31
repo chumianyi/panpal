@@ -247,7 +247,7 @@ class _ParserScreenState extends State<ParserScreen> {
     if (downloadUrl == null && data['bodyText'] != null) {
       final bodyText = data['bodyText'].toString();
       // Look for URL patterns
-      final urlMatch = RegExp(r'https?://[^\s<>"\']+', caseSensitive: false).firstMatch(bodyText);
+      final urlMatch = RegExp('https?://[^\\s<>"\']+', caseSensitive: false).firstMatch(bodyText);
       if (urlMatch != null) {
         final candidate = urlMatch.group(0)!;
         if (_looksLikeDownloadUrl(candidate)) {

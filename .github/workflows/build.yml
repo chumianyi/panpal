@@ -52,15 +52,13 @@ jobs:
           export GOTOOLCHAIN=go1.24.11
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125
-          cd /tmp/gopeed
+          mkdir -p /tmp/gopeed-bind
+          cd /tmp/gopeed-bind
+          printf 'module gopeed-bind\n\ngo 1.24.9\ntoolchain go1.24.11\n\nrequire github.com/GopeedLab/gopeed v1.9.3\nrequire golang.org/x/mobile v0.0.0-20241108191957-fa514ef75a0f\n' > go.mod
+          go mod edit -replace github.com/GopeedLab/gopeed=/tmp/gopeed
           go mod download
-          go get -tool golang.org/x/mobile/cmd/gobind@${{ env.XMOBILE_VERSION }}
-          gomobile bind -tags nosqlite -ldflags="-w -s" \
-            -o /tmp/libgopeed.aar \
-            -target=android/arm64 \
-            -androidapi 21 \
-            -javapkg="com.gopeed" \
-            github.com/GopeedLab/gopeed/bind/mobile
+          go mod tidy
+          gomobile bind -tags nosqlite -ldflags="-w -s" -o /tmp/libgopeed.aar -target=android/arm64 -androidapi 21 -javapkg="com.gopeed" github.com/GopeedLab/gopeed/bind/mobile
           ls -la /tmp/libgopeed.aar
 
       - name: Copy gopeed AAR to project

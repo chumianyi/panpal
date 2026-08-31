@@ -29,6 +29,7 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
   bool _searchMode = false;
   String _sortBy = 'time';
   bool _sortDesc = true;
+  StorageInfo? _storageInfo;
 
   @override
   void initState() {
@@ -43,6 +44,13 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
     if (credential != null) {
       await _provider.parseCredential(credential);
     }
+    // Load storage info
+    try {
+      final info = await _provider.getStorageInfo();
+      if (mounted && info.total > 0) {
+        setState(() => _storageInfo = info);
+      }
+    } catch (_) {}
     _loadFiles();
   }
 
@@ -301,6 +309,42 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
         ),
         body: Column(
           children: [
+            if (_storageInfo != null && _storageInfo!.total > 0)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('已用 ${FormatUtils.fileSize(_storageInfo!.used)}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                        Text('总 ${FormatUtils.fileSize(_storageInfo!.total)}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: _storageInfo!.total > 0
+                            ? (_storageInfo!.used / _storageInfo!.total).clamp(0.0, 1.0)
+                            : 0.0,
+                        minHeight: 4,
+                        backgroundColor: Colors.grey[300],
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '剩余 ${FormatUtils.fileSize(_storageInfo!.total - _storageInfo!.used)}',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    ),
+                  ],
+                ),
+              ),
             if (_currentPath != '/')
               Container(
                 width: double.infinity,

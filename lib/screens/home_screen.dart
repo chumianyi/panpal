@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/drive_account.dart';
+import '../providers/base_provider.dart';
+import '../providers/drive_provider_factory.dart';
 import '../services/credential_storage.dart';
 import '../utils/format_utils.dart';
 import 'add_drive_screen.dart';
@@ -14,6 +16,33 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshStorageInfo());
+  }
+
+  Future<void> _refreshStorageInfo() async {
+    if (!mounted) return;
+    final storage = context.read<CredentialStorage>();
+    final accounts = List<DriveAccount>.from(storage.accounts);
+    for (final account in accounts) {
+      if (!account.type.supportsFileList) continue;
+      try {
+        final provider = DriveProviderFactory.create(account.type);
+        final cred = await storage.getCredential(account.id);
+        if (cred != null) {
+          await provider.parseCredential(cred);
+        }
+        final info = await provider.getStorageInfo();
+        if (info.total > 0 && mounted) {
+          final updated = account.copyWith(usedSpace: info.used, totalSpace: info.total);
+          await storage.updateAccount(updated);
+        }
+      } catch (_) {}
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final storage = context.watch<CredentialStorage>();

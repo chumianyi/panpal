@@ -24,17 +24,27 @@ class AListService {
     await _ensureBinary();
   }
 
-  Future<void> _ensureBinary() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final alistDir = Directory(p.join(appDir.path, 'alist'));
+  /// 获取 AList 工作目录（使用 filesDir，允许执行二进制）
+  Future<Directory> _getAlistDir() async {
+    // getApplicationSupportDirectory 在 Android 上返回 /data/data/<pkg>/files
+    // 该目录允许执行二进制文件，不同于 app_flutter 目录
+    final supportDir = await getApplicationSupportDirectory();
+    final alistDir = Directory(p.join(supportDir.path, 'alist'));
     if (!await alistDir.exists()) {
       await alistDir.create(recursive: true);
     }
+    return alistDir;
+  }
+
+  Future<void> _ensureBinary() async {
+    final alistDir = await _getAlistDir();
     final binary = File(p.join(alistDir.path, 'alist'));
+
     if (!await binary.exists()) {
       // ignore: avoid_print
       print('[AList] 二进制不存在，开始从 assets 复制并合并分片...');
-      // Combine split binary parts from assets
+      print('[AList] 目标目录: ${alistDir.path}');
+
       final parts = ['assets/alist/alist.partaa', 'assets/alist/alist.partab'];
       final bytesBuilder = BytesBuilder();
       for (final part in parts) {
@@ -58,21 +68,41 @@ class AListService {
     } else {
       final existingSize = await binary.length();
       // ignore: avoid_print
-      print('[AList] 二进制已存在，大小: $existingSize 字节');
+      print('[AList] 二进制已存在: ${binary.path}, 大小: $existingSize 字节');
     }
-    await Process.run('chmod', ['+x', binary.path]);
+
+    // 设置可执行权限（使用 Android 系统 chmod，755 = rwxr-xr-x）
     // ignore: avoid_print
-    print('[AList] 二进制权限已设置为可执行');
+    print('[AList] 设置可执行权限: chmod 755 ${binary.path}');
+    final chmodResult = await Process.run('/system/bin/chmod', ['755', binary.path]);
+    // ignore: avoid_print
+    print('[AList] chmod exit code: ${chmodResult.exitCode}');
+    if (chmodResult.exitCode != 0) {
+      // ignore: avoid_print
+      print('[AList] chmod stderr: ${chmodResult.stderr}');
+      // 尝试备用方式
+      await Process.run('sh', ['-c', 'chmod 755 "${binary.path}"']);
+    }
+
+    // 验证权限
+    final lsResult = await Process.run('ls', ['-la', binary.path]);
+    // ignore: avoid_print
+    print('[AList] 权限验证: ${lsResult.stdout.toString().trim()}');
   }
 
   Future<String> get binaryPath async {
-    final appDir = await getApplicationDocumentsDirectory();
-    return p.join(appDir.path, 'alist', 'alist');
+    final alistDir = await _getAlistDir();
+    return p.join(alistDir.path, 'alist');
+  }
+
+  Future<String> get alistDirPath async {
+    final alistDir = await _getAlistDir();
+    return alistDir.path;
   }
 
   Future<String> get dataDir async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final dir = Directory(p.join(appDir.path, 'alist', 'data'));
+    final alistDir = await _getAlistDir();
+    final dir = Directory(p.join(alistDir.path, 'data'));
     if (!await dir.exists()) await dir.create(recursive: true);
     return dir.path;
   }
@@ -81,85 +111,111 @@ class AListService {
     if (_isRunning) return;
     _port = port;
 
-    // 确保二进制存在（双重保障：即使 init() 未被调用也能自动初始化）
+    // 确保二进制存在且权限正确
     await _ensureBinary();
 
     final binPath = await binaryPath;
+    final workDir = await alistDirPath;
     final dataPath = await dataDir;
 
     final binaryFile = File(binPath);
     if (!await binaryFile.exists()) {
-      throw Exception('AList 二进制文件不存在，初始化失败');
+      throw Exception('AList 二进制文件不存在: $binPath');
     }
 
-    // 验证文件大小
     final fileSize = await binaryFile.length();
     if (fileSize < 1000000) {
       throw Exception('AList 二进制文件损坏（大小: $fileSize 字节）');
     }
 
     // ignore: avoid_print
-    print('[AList] 启动服务: $binPath, 端口: $port, 大小: ${(fileSize / 1024 / 1024).toStringAsFixed(1)}MB');
+    print('[AList] 启动服务');
+    print('[AList]   二进制: $binPath');
+    print('[AList]   工作目录: $workDir');
+    print('[AList]   数据目录: $dataPath');
+    print('[AList]   端口: $port');
+    print('[AList]   大小: ${(fileSize / 1024 / 1024).toStringAsFixed(1)}MB');
+
+    // 通过 sh 执行，绕过 Android 对直接执行二进制的 SELinux 限制
+    // 使用 workingDirectory 确保相对路径正确
+    final command = 'ALIST_PORT=$port ./alist server --data ./data';
+    // ignore: avoid_print
+    print('[AList] 执行命令: sh -c "$command" (cwd: $workDir)');
 
     _process = await Process.start(
-      binPath,
-      ['server', '--data', dataPath],
+      '/system/bin/sh',
+      ['-c', command],
+      workingDirectory: workDir,
       environment: {'ALIST_PORT': port.toString()},
     );
 
     _isRunning = true;
     _statusController.add(true);
 
-    // Monitor process output
+    // 监控 stdout
     _process!.stdout.transform(utf8.decoder).listen((line) {
-      // Parse admin password from output if present
+      // ignore: avoid_print
+      print('[AList OUT] $line');
       final match = RegExp(r'password[:：]\s*(\S+)').firstMatch(line);
       if (match != null && _adminPassword == null) {
         _adminPassword = match.group(1);
+        // ignore: avoid_print
+        print('[AList] 解析到管理员密码');
       }
     });
+
+    // 监控 stderr
     _process!.stderr.transform(utf8.decoder).listen((line) {
       // ignore: avoid_print
       print('[AList ERR] $line');
     });
 
-    // Auto-restart on crash
+    // 崩溃自动重启
     _process!.exitCode.then((code) {
+      // ignore: avoid_print
+      print('[AList] 进程退出，code: $code, _isRunning: $_isRunning');
       if (_isRunning) {
         _isRunning = false;
         _statusController.add(false);
-        // Auto restart after 3 seconds
         Future.delayed(const Duration(seconds: 3), () {
-          if (!_isRunning) start(port: port);
+          if (!_isRunning) {
+            // ignore: avoid_print
+            print('[AList] 自动重启...');
+            start(port: port);
+          }
         });
       }
     });
 
-    // Wait for server to be ready
+    // 等待服务就绪
     await _waitForReady();
-
-    // Login to get token
+    // 登录获取 token
     await _login();
-
-    // Start health check
+    // 启动健康检查
     _startHealthCheck();
   }
 
   Future<void> _waitForReady() async {
+    // ignore: avoid_print
+    print('[AList] 等待服务就绪（端口 $_port）...');
     for (int i = 0; i < 30; i++) {
       try {
         final socket = await Socket.connect('127.0.0.1', _port, timeout: const Duration(seconds: 1));
         await socket.close();
+        // ignore: avoid_print
+        print('[AList] 服务已就绪（${i + 1}秒）');
         return;
       } catch (_) {
         await Future.delayed(const Duration(seconds: 1));
       }
     }
-    throw Exception('AList 服务启动超时');
+    throw Exception('AList 服务启动超时（30秒）');
   }
 
   Future<void> _login() async {
     try {
+      // ignore: avoid_print
+      print('[AList] 登录获取 token...');
       final client = HttpClient();
       final request = await client.post('127.0.0.1', _port, '/api/auth/login');
       request.headers.contentType = ContentType.json;
@@ -172,11 +228,16 @@ class AListService {
       final data = jsonDecode(body);
       if (data['code'] == 200) {
         _token = data['data']['token'];
+        // ignore: avoid_print
+        print('[AList] 登录成功，token 已获取');
+      } else {
+        // ignore: avoid_print
+        print('[AList] 登录失败: ${data['message']}');
       }
       client.close();
     } catch (e) {
       // ignore: avoid_print
-      print('AList login failed: $e');
+      print('[AList] 登录异常: $e');
     }
   }
 
@@ -190,12 +251,14 @@ class AListService {
         response.drain();
         client.close();
       } catch (_) {
-        // Server might be down, process monitor will restart
+        // 服务可能挂了，进程监控会自动重启
       }
     });
   }
 
   Future<void> stop() async {
+    // ignore: avoid_print
+    print('[AList] 停止服务');
     _isRunning = false;
     _healthCheckTimer?.cancel();
     _statusController.add(false);
@@ -210,16 +273,22 @@ class AListService {
     await start(port: port ?? _port);
   }
 
-  // Get admin password (for first time setup)
+  /// 获取管理员密码（首次启动时使用）
   Future<String?> getAdminPassword() async {
     if (_adminPassword != null) return _adminPassword;
     final binPath = await binaryPath;
-    final dataPath = await dataDir;
+    final workDir = await alistDirPath;
+    // ignore: avoid_print
+    print('[AList] 获取管理员密码...');
+    // 通过 sh 执行
     final result = await Process.run(
-      binPath,
-      ['admin', '--data', dataPath],
+      '/system/bin/sh',
+      ['-c', './alist admin --data ./data'],
+      workingDirectory: workDir,
     );
     final output = result.stdout.toString();
+    // ignore: avoid_print
+    print('[AList] admin 命令输出: $output');
     final match = RegExp(r'password[:：]\s*(\S+)').firstMatch(output);
     if (match != null) {
       _adminPassword = match.group(1);

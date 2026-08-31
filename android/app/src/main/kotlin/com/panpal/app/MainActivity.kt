@@ -53,7 +53,7 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         try {
             if (gopeedStarted) {
-                Libgopeed.Stop()
+                Libgopeed.stop()
                 gopeedStarted = false
             }
         } catch (_: Exception) {}

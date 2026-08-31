@@ -67,16 +67,17 @@ jobs:
           done
           ls -la /tmp/gopeed-jars/
 
-          # Merge all jars into one (use jar command)
+          # Merge all jars into one, keeping only gopeed and gomobile classes
           mkdir -p /tmp/gopeed-merged
           cd /tmp/gopeed-merged
           for jar in /tmp/gopeed-jars/*.jar; do
-            jar xf "$jar" 2>/dev/null || true
+            echo "Contents of $(basename $jar):"
+            jar tf "$jar" | grep -E "com/gopeed|golang" | head -20
+            unzip -o "$jar" 'com/gopeed/*' 'golang/*' 2>/dev/null || true
           done
-          # Remove Flutter and other non-gopeed classes to avoid conflicts
-          # Keep only com/gopeed and golang/org/x/mobile/bind
-          find . -type f -name "*.class" | grep -v "com/gopeed" | grep -v "golang" | xargs rm -f 2>/dev/null || true
-          find . -type d -empty -delete 2>/dev/null || true
+          # Also list what we extracted
+          find . -name "*.class" | head -20
+          echo "Total classes: $(find . -name '*.class' | wc -l)"
           jar cf /tmp/gopeed-classes.jar .
           cd -
           ls -la /tmp/gopeed-classes.jar

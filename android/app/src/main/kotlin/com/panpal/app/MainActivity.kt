@@ -5,7 +5,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
-import com.gopeed.Libgopeed
+import com.gopeed.libgopeed.Libgopeed
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.panpal.app/gopeed"
@@ -24,7 +24,7 @@ class MainActivity : FlutterActivity() {
                             config.put("address", "127.0.0.1:0")
                             config.put("storage", storageDir)
                             config.put("productionMode", true)
-                            val port = Libgopeed.Start(config.toString())
+                            val port = Libgopeed.start(config.toString())
                             gopeedStarted = true
                             result.success(port)
                         } else {
@@ -37,7 +37,7 @@ class MainActivity : FlutterActivity() {
                 "stopGopeed" -> {
                     try {
                         if (gopeedStarted) {
-                            Libgopeed.Stop()
+                            Libgopeed.stop()
                             gopeedStarted = false
                         }
                         result.success(null)

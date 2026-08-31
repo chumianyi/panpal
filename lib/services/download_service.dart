@@ -12,6 +12,7 @@ class _Segment {
   int downloaded;
   CancelToken? cancelToken;
   bool active;
+  bool cancelled;
 
   _Segment({
     required this.index,
@@ -20,10 +21,17 @@ class _Segment {
     this.downloaded = 0,
     this.cancelToken,
     this.active = false,
+    this.cancelled = false,
   });
 
   int get total => end - start + 1;
   int get currentStart => start + downloaded;
+}
+
+class _SpeedPoint {
+  final int bytes;
+  final DateTime time;
+  _SpeedPoint(this.bytes, this.time);
 }
 
 class DownloadService extends ChangeNotifier {
@@ -131,12 +139,12 @@ class DownloadService extends ChangeNotifier {
 
       // Check if all segments completed
       final allDone = segments.every((s) => s.downloaded >= s.total);
-      if (allDone && _tasks.any((t) => t.id == task.id && t.status != DownloadStatus.cancelled)) {
+      if (allDone && _tasks.any((t) => t.id == task.id && t.status != DownloadStatus.canceled)) {
         await _mergeSegments(task, tempFiles);
         _updateTask(task.id, status: DownloadStatus.completed, downloadedSize: contentLength, completedAt: DateTime.now());
       }
     } catch (e) {
-      if (_tasks.any((t) => t.id == task.id && t.status != DownloadStatus.cancelled)) {
+      if (_tasks.any((t) => t.id == task.id && t.status != DownloadStatus.canceled)) {
         _updateTask(task.id, status: DownloadStatus.failed, error: e.toString());
       }
     }
@@ -162,7 +170,7 @@ class DownloadService extends ChangeNotifier {
       await raf.setPosition(seg.downloaded);
 
       await for (final chunk in resp.data!.stream) {
-        if (seg.cancelToken?.isCancelled ?? false) break;
+        if (seg.cancelled) break;
         await raf.writeFrom(chunk);
         seg.downloaded += chunk.length;
         _updateTaskProgress(task.id);
@@ -194,7 +202,7 @@ class DownloadService extends ChangeNotifier {
         },
       );
 
-      if (_tasks.any((t) => t.id == task.id && t.status != DownloadStatus.cancelled)) {
+      if (_tasks.any((t) => t.id == task.id && t.status != DownloadStatus.canceled)) {
         await tempFile.rename(task.savePath);
         _updateTask(task.id, status: DownloadStatus.completed, completedAt: DateTime.now());
       }
@@ -229,19 +237,19 @@ class DownloadService extends ChangeNotifier {
     _updateTask(taskId, downloadedSize: downloaded, totalSize: total > 0 ? total : null, speed: speed);
   }
 
-  final Map<String, List<(int, DateTime)>> _speedHistory = {};
+  final Map<String, List<_SpeedPoint>> _speedHistory = {};
 
   double _calculateSpeed(String taskId, int downloaded) {
     final now = DateTime.now();
     final history = _speedHistory.putIfAbsent(taskId, () => []);
-    history.add((downloaded, now));
+    history.add(_SpeedPoint(downloaded, now));
     while (history.length > 10) history.removeAt(0);
     if (history.length < 2) return 0;
     final first = history.first;
     final last = history.last;
-    final dt = last.$2.difference(first.$2).inMilliseconds / 1000;
+    final dt = last.time.difference(first.time).inMilliseconds / 1000;
     if (dt <= 0) return 0;
-    return (last.$1 - first.$1) / dt;
+    return (last.bytes - first.bytes) / dt;
   }
 
   void _updateProgress() {
@@ -281,6 +289,7 @@ class DownloadService extends ChangeNotifier {
     final segs = _segments[taskId];
     if (segs != null) {
       for (final seg in segs) {
+        seg.cancelled = true;
         seg.cancelToken?.cancel();
       }
     }
@@ -303,13 +312,17 @@ class DownloadService extends ChangeNotifier {
 
     _updateTask(taskId, status: DownloadStatus.downloading);
     final tempFiles = _tempFiles[taskId] ?? [];
+    for (final seg in segs) {
+      seg.cancelled = false;
+      seg.cancelToken = CancelToken();
+    }
     final futures = segs.where((s) => s.downloaded < s.total).map((seg) {
       return _downloadSegment(task, seg, tempFiles[seg.index], const {});
     }).toList();
 
     await Future.wait(futures, eagerError: false);
     final allDone = segs.every((s) => s.downloaded >= s.total);
-    if (allDone && _tasks.any((t) => t.id == taskId && t.status != DownloadStatus.cancelled)) {
+    if (allDone && _tasks.any((t) => t.id == taskId && t.status != DownloadStatus.canceled)) {
       await _mergeSegments(task, tempFiles);
       _updateTask(taskId, status: DownloadStatus.completed, completedAt: DateTime.now());
     }
@@ -319,6 +332,7 @@ class DownloadService extends ChangeNotifier {
     final segs = _segments[taskId];
     if (segs != null) {
       for (final seg in segs) {
+        seg.cancelled = true;
         seg.cancelToken?.cancel();
       }
     }

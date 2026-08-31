@@ -6,6 +6,7 @@ import 'services/download_service.dart';
 import 'services/settings_service.dart';
 import 'services/chumian_drive_service.dart';
 import 'services/notification_service.dart';
+import 'services/alist_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/parser_screen.dart';
 import 'screens/settings_screen.dart';
@@ -24,6 +25,7 @@ class _PanPalAppState extends State<PanPalApp> {
   int _currentIndex = 0;
   bool _initialized = false;
   final ChumianDriveService _chumianService = ChumianDriveService();
+  final AListService _alistService = AListService();
 
   @override
   void initState() {
@@ -63,7 +65,7 @@ class _PanPalAppState extends State<PanPalApp> {
               body: IndexedStack(
                 index: _currentIndex,
                 children: [
-                  const HomeScreen(),
+                  HomeScreen(alistService: _alistService),
                   ChumianDriveScreen(service: _chumianService),
                   const ParserScreen(),
                   const DownloadScreen(),

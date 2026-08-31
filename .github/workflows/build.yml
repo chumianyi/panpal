@@ -41,8 +41,6 @@ jobs:
           go install golang.org/x/mobile/cmd/gomobile@${{ env.XMOBILE_VERSION }}
           go install golang.org/x/mobile/cmd/gobind@${{ env.XMOBILE_VERSION }}
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          gomobile init
 
       - name: Clone gopeed
         run: |

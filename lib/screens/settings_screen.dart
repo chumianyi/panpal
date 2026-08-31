@@ -12,26 +12,17 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late TextEditingController _parserApiController;
-  String _version = '2.0.0';
+  String _version = '2.2.0';
 
   @override
   void initState() {
     super.initState();
-    final settings = context.read<SettingsService>();
-    _parserApiController = TextEditingController(text: settings.parserApi);
     _loadVersion();
   }
 
   Future<void> _loadVersion() async {
     final info = await PackageInfo.fromPlatform();
     setState(() => _version = info.version);
-  }
-
-  @override
-  void dispose() {
-    _parserApiController.dispose();
-    super.dispose();
   }
 
   @override
@@ -61,19 +52,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(),
           _buildSectionHeader('解析设置'),
-          SwitchListTile(
-            secondary: const Icon(Icons.auto_awesome),
-            title: const Text('使用内置解析'),
-            subtitle: const Text('关闭后使用第三方解析API'),
-            value: settings.useBuiltinParser,
-            onChanged: (v) => settings.useBuiltinParser = v,
-          ),
           ListTile(
-            leading: const Icon(Icons.api),
-            title: const Text('第三方解析API'),
-            subtitle: Text(settings.parserApi, maxLines: 1, overflow: TextOverflow.ellipsis),
-            enabled: !settings.useBuiltinParser,
-            onTap: () => _editParserApi(settings),
+            leading: const Icon(Icons.auto_awesome),
+            title: const Text('本地解析器'),
+            subtitle: const Text('内置Dart轻量解析器，支持蓝奏云、123云盘等，无需第三方API'),
+            enabled: false,
           ),
           const Divider(),
           _buildSectionHeader('主题设置'),
@@ -129,29 +112,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey[600])),
-    );
-  }
-
-  void _editParserApi(SettingsService settings) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('第三方解析API'),
-        content: TextField(
-          controller: _parserApiController,
-          decoration: const InputDecoration(hintText: 'https://zl.390kk.com/parser?url='),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          FilledButton(
-            onPressed: () {
-              settings.parserApi = _parserApiController.text;
-              Navigator.pop(ctx);
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
     );
   }
 

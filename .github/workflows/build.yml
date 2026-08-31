@@ -7,12 +7,11 @@ on:
 env:
   FLUTTER_VERSION: '3.24.5'
   JAVA_VERSION: '17'
-  GOPEED_VERSION: 'v1.9.3'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,66 +26,6 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
-
-      - name: Extract gopeed native library and Java classes
-        run: |
-          set -e
-
-          # Download gopeed arm64-v8a APK
-          echo "Downloading gopeed ${{ env.GOPEED_VERSION }} APK..."
-          curl -sL -o /tmp/gopeed.apk \
-            "https://github.com/GopeedLab/gopeed/releases/download/${{ env.GOPEED_VERSION }}/Gopeed-${{ env.GOPEED_VERSION }}-android-arm64-v8a.apk"
-          ls -la /tmp/gopeed.apk
-
-          # Extract native library (.so)
-          echo "Extracting native library..."
-          mkdir -p android/app/src/main/jniLibs/arm64-v8a
-          unzip -o /tmp/gopeed.apk "lib/arm64-v8a/*.so" -d /tmp/gopeed-extract
-          cp /tmp/gopeed-extract/lib/arm64-v8a/*.so android/app/src/main/jniLibs/arm64-v8a/
-          ls -la android/app/src/main/jniLibs/arm64-v8a/
-
-          # Extract classes.dex files
-          echo "Extracting classes.dex..."
-          unzip -o /tmp/gopeed.apk "classes*.dex" -d /tmp/gopeed-dex
-          ls -la /tmp/gopeed-dex/
-
-          # Download dex2jar
-          echo "Downloading dex2jar..."
-          curl -sL -o /tmp/dex2jar.zip \
-            "https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip"
-          unzip -o /tmp/dex2jar.zip -d /tmp/dex2jar
-          D2J=$(find /tmp/dex2jar -name "d2j-dex2jar.sh" -type f | head -1)
-          chmod +x $D2J
-          echo "Using dex2jar: $D2J"
-
-          # Convert each classes.dex to jar and merge
-          mkdir -p /tmp/gopeed-jars
-          for dex in /tmp/gopeed-dex/classes*.dex; do
-            echo "Converting $dex..."
-            $D2J -f -o "/tmp/gopeed-jars/$(basename $dex .dex).jar" "$dex" 2>&1 || true
-          done
-          ls -la /tmp/gopeed-jars/
-
-          # Merge all jars into one, keeping only gopeed and gomobile classes
-          mkdir -p /tmp/gopeed-merged
-          cd /tmp/gopeed-merged
-          for jar in /tmp/gopeed-jars/*.jar; do
-            echo "Contents of $(basename $jar):"
-            jar tf "$jar" | grep -E "com/gopeed|golang" | head -20
-            unzip -o "$jar" 'com/gopeed/*' 'golang/*' 2>/dev/null || true
-          done
-          # Also list what we extracted
-          find . -name "*.class" | head -20
-          echo "Total classes: $(find . -name '*.class' | wc -l)"
-          jar cf /tmp/gopeed-classes.jar .
-          cd -
-          ls -la /tmp/gopeed-classes.jar
-
-          # Copy to project libs
-          cp /tmp/gopeed-classes.jar android/app/libs/gopeed-classes.jar
-          ls -la android/app/libs/
-
-          echo "=== gopeed extraction complete ==="
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -108,7 +47,7 @@ jobs:
         run: flutter build apk --release --target-platform android-arm64
 
       - name: Rename APK
-        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/PanPal-v2.0.0-arm64-v8a.apk
+        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/PanPal-v2.0.1-arm64-v8a.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4

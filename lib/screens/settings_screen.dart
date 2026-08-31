@@ -42,7 +42,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(title: const Text('我的', style: TextStyle(fontWeight: FontWeight.bold))),
       body: ListView(
         children: [
-          _buildSectionHeader('下载设置 (Gopeed 下载引擎)'),
+          _buildSectionHeader('下载设置'),
           ListTile(
             leading: const Icon(Icons.device_hub),
             title: const Text('默认连接数'),
@@ -116,7 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.code),
             title: const Text('开源声明'),
-            subtitle: const Text('基于 Flutter 构建，集成 Gopeed 下载引擎'),
+            subtitle: const Text('基于 Flutter 构建，内置多连接下载引擎'),
             onTap: () => showLicensePage(context: context, applicationName: 'PanPal', applicationVersion: _version),
           ),
           const SizedBox(height: 24),

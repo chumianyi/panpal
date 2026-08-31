@@ -32,8 +32,6 @@ class _PanPalAppState extends State<PanPalApp> {
     await settings.init();
     final credStorage = context.read<CredentialStorage>();
     await credStorage.init();
-    final downloadService = context.read<DownloadService>();
-    await downloadService.init();
     if (!mounted) return;
     setState(() {
       _themeMode = settings.themeMode;

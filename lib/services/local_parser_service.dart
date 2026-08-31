@@ -91,7 +91,7 @@ class LocalParserService {
       if (nameMatch != null) {
         fileName = nameMatch.group(1)!.replaceAll(RegExp(r'[-_]\s*蓝奏云.*$'), '').trim();
       }
-      final fnMatch = RegExp(r'filename[=:]\s*["\']?([^"\'<>\s]+)', caseSensitive: false).firstMatch(html);
+      final fnMatch = RegExp(r'''filename[=:]\s*["']?([^"'<>\s]+)''', caseSensitive: false).firstMatch(html);
       if (fnMatch != null) fileName = fnMatch.group(1)!;
 
       // Extract file size
@@ -118,16 +118,16 @@ class LocalParserService {
         final iframeHtml = iframeResp.data.toString();
 
         // Extract download URL from iframe
-        final dlMatch = RegExp(r'(?:url|src|href)\s*[=:]\s*["\'](https?://[^"\']+)', caseSensitive: false)
+        final dlMatch = RegExp(r'''(?:url|src|href)\s*[=:]\s*["'](https?://[^"']+)''', caseSensitive: false)
             .firstMatch(iframeHtml);
         if (dlMatch != null) downloadUrl = dlMatch.group(1);
 
         // Try to find the ajaxdata / post data for download
-        final ajaxMatch = RegExp(r'ajaxdata\s*=\s*[\'"]([^\'"]+)[\'"]').firstMatch(iframeHtml);
+        final ajaxMatch = RegExp(r'''ajaxdata\s*=\s*['"]([^'"]+)['"]''').firstMatch(iframeHtml);
         if (ajaxMatch != null && downloadUrl == null) {
           // Need to POST to get download URL
           final postData = ajaxMatch.group(1)!;
-          final actionMatch = RegExp(r'data\s*:\s*[\'"]([^\'"]+)[\'"]').firstMatch(iframeHtml);
+          final actionMatch = RegExp(r'''data\s*:\s*['"]([^'"]+)['"]''').firstMatch(iframeHtml);
           try {
             final postResp = await _dio.post(
               'https://www.lanzou.com/ajaxm.php',
@@ -419,9 +419,9 @@ class LocalParserService {
   String? _extractUrl(String html) {
     // Look for direct download URLs
     final patterns = [
-      RegExp(r'(?:download_url|downloadUrl|direct_url|directUrl|url)\s*[:=]\s*["\'](https?://[^"\']+)', caseSensitive: false),
-      RegExp(r'href\s*=\s*["\'](https?://[^"\']*(?:download|getfile|downfile)[^"\']*)["\']', caseSensitive: false),
-      RegExp(r'(https?://[^\s<>"\']+\.(?:zip|rar|7z|apk|exe|mp4|mkv|mp3|flac|pdf|doc|iso|tar|gz))', caseSensitive: false),
+      RegExp(r'''(?:download_url|downloadUrl|direct_url|directUrl|url)\s*[:=]\s*["'](https?://[^"']+)''', caseSensitive: false),
+      RegExp(r'''href\s*=\s*["'](https?://[^"']*(?:download|getfile|downfile)[^"']*)["']''', caseSensitive: false),
+      RegExp(r'''(https?://[^\s<>"']+\.(?:zip|rar|7z|apk|exe|mp4|mkv|mp3|flac|pdf|doc|iso|tar|gz))''', caseSensitive: false),
     ];
 
     for (final pattern in patterns) {

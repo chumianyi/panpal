@@ -217,7 +217,7 @@ class _DownloadWorker {
     // 清理临时文件
     for (var i = 0; i < _chunks.length; i++) {
       final part = File('${task.savePath}.part$i');
-      part.exists().then((e) => e ? part.delete() : null);
+      () async { if (await part.exists()) await part.delete(); }();
     }
     task.status = DownloadStatus.canceled;
     onProgress(task);

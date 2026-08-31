@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:cookie_jar/cookie_jar.dart';
 import '../models/cloud_file.dart';
 import '../models/drive_account.dart';
 import 'base_provider.dart';
@@ -12,7 +11,7 @@ class CaiyunProvider extends BaseDriveProvider {
   String get loginUrl => 'https://caiyun.feixin.10086.cn/';
 
   final Dio _dio = Dio();
-  final CookieJar _cookieJar = CookieJar();
+  String _cookieStr = "";
 
   CaiyunProvider() {
     _dio.options.baseUrl = 'https://caiyun.feixin.10086.cn';
@@ -26,7 +25,7 @@ class CaiyunProvider extends BaseDriveProvider {
     credential = cred;
     final cookies = cred['cookies'] as Map<String, dynamic>? ?? {};
     final cookieList = cookies.entries.map((e) => '${e.key}=${e.value}').toList();
-    _cookieJar.saveFromResponse(Uri.parse('https://caiyun.feixin.10086.cn'), cookieList.map((c) => Cookie.fromSetCookieValue(c)).toList());
+    _cookieStr = cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
     try {
       final info = await getStorageInfo();
       return DriveAccount(id: 'caiyun_${DateTime.now().millisecondsSinceEpoch}', type: DriveType.caiyun, displayName: '和彩云用户', usedSpace: info.used, totalSpace: info.total, addedAt: DateTime.now());
@@ -35,7 +34,6 @@ class CaiyunProvider extends BaseDriveProvider {
     }
   }
 
-  String get _cookieStr => _cookieJar.loadForRequest(Uri.parse('https://caiyun.feixin.10086.cn')).map((c) => '${c.name}=${c.value}').join('; ');
   Map<String, String> get _headers => {'User-Agent': desktopUA, 'Referer': 'https://caiyun.feixin.10086.cn/', 'Cookie': _cookieStr, 'Content-Type': 'application/json'};
 
   @override
@@ -143,6 +141,6 @@ class CaiyunProvider extends BaseDriveProvider {
   @override
   Future<void> logout() async {
     credential.clear();
-    _cookieJar.deleteAll();
+    _cookieStr = "";
   }
 }

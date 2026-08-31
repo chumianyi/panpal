@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:cookie_jar/cookie_jar.dart';
 import '../models/cloud_file.dart';
 import '../models/drive_account.dart';
 import 'base_provider.dart';
@@ -12,7 +11,7 @@ class TianyiProvider extends BaseDriveProvider {
   String get loginUrl => 'https://cloud.189.cn/';
 
   final Dio _dio = Dio();
-  final CookieJar _cookieJar = CookieJar();
+  String _cookieStr = "";
 
   TianyiProvider() {
     _dio.options.baseUrl = 'https://cloud.189.cn';
@@ -26,7 +25,7 @@ class TianyiProvider extends BaseDriveProvider {
     credential = cred;
     final cookies = cred['cookies'] as Map<String, dynamic>? ?? {};
     final cookieList = cookies.entries.map((e) => '${e.key}=${e.value}').toList();
-    _cookieJar.saveFromResponse(Uri.parse('https://cloud.189.cn'), cookieList.map((c) => Cookie.fromSetCookieValue(c)).toList());
+    _cookieStr = cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
     try {
       final info = await getStorageInfo();
       return DriveAccount(id: 'tianyi_${DateTime.now().millisecondsSinceEpoch}', type: DriveType.tianyi, displayName: '天翼云盘用户', usedSpace: info.used, totalSpace: info.total, addedAt: DateTime.now());
@@ -35,7 +34,6 @@ class TianyiProvider extends BaseDriveProvider {
     }
   }
 
-  String get _cookieStr => _cookieJar.loadForRequest(Uri.parse('https://cloud.189.cn')).map((c) => '${c.name}=${c.value}').join('; ');
   Map<String, String> get _headers => {'User-Agent': desktopUA, 'Referer': 'https://cloud.189.cn/', 'Cookie': _cookieStr};
 
   @override
@@ -150,6 +148,6 @@ class TianyiProvider extends BaseDriveProvider {
   @override
   Future<void> logout() async {
     credential.clear();
-    _cookieJar.deleteAll();
+    _cookieStr = "";
   }
 }

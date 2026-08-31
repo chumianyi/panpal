@@ -5,7 +5,7 @@ class DownloadTask {
   final String url;
   final String fileName;
   final String savePath;
-  final int totalSize;
+  int totalSize;
   int downloadedSize;
   DownloadStatus status;
   final int connections;

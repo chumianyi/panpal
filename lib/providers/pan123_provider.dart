@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:cookie_jar/cookie_jar.dart';
 import '../models/cloud_file.dart';
 import '../models/drive_account.dart';
 import 'base_provider.dart';
@@ -12,7 +11,7 @@ class Pan123Provider extends BaseDriveProvider {
   String get loginUrl => 'https://www.123pan.com/';
 
   final Dio _dio = Dio();
-  final CookieJar _cookieJar = CookieJar();
+  String _cookieStr = "";
 
   Pan123Provider() {
     _dio.options.baseUrl = 'https://www.123pan.com';
@@ -26,7 +25,7 @@ class Pan123Provider extends BaseDriveProvider {
     credential = cred;
     final cookies = cred['cookies'] as Map<String, dynamic>? ?? {};
     final cookieList = cookies.entries.map((e) => '${e.key}=${e.value}').toList();
-    _cookieJar.saveFromResponse(Uri.parse('https://www.123pan.com'), cookieList.map((c) => Cookie.fromSetCookieValue(c)).toList());
+    _cookieStr = cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
     try {
       final info = await getStorageInfo();
       return DriveAccount(
@@ -42,7 +41,6 @@ class Pan123Provider extends BaseDriveProvider {
     }
   }
 
-  String get _cookieStr => _cookieJar.loadForRequest(Uri.parse('https://www.123pan.com')).map((c) => '${c.name}=${c.value}').join('; ');
 
   Map<String, String> get _headers => {'User-Agent': desktopUA, 'Referer': 'https://www.123pan.com/', 'Cookie': _cookieStr, 'Content-Type': 'application/json'};
 
@@ -169,6 +167,6 @@ class Pan123Provider extends BaseDriveProvider {
   @override
   Future<void> logout() async {
     credential.clear();
-    _cookieJar.deleteAll();
+    _cookieStr = "";
   }
 }

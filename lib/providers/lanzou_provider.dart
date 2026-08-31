@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:cookie_jar/cookie_jar.dart';
 import '../models/cloud_file.dart';
 import '../models/drive_account.dart';
 import 'base_provider.dart';
@@ -12,7 +11,7 @@ class LanzouProvider extends BaseDriveProvider {
   String get loginUrl => 'https://www.lanzou.com/';
 
   final Dio _dio = Dio();
-  final CookieJar _cookieJar = CookieJar();
+  String _cookieStr = "";
 
   LanzouProvider() {
     _dio.options.baseUrl = 'https://www.lanzou.com';
@@ -26,11 +25,10 @@ class LanzouProvider extends BaseDriveProvider {
     credential = cred;
     final cookies = cred['cookies'] as Map<String, dynamic>? ?? {};
     final cookieList = cookies.entries.map((e) => '${e.key}=${e.value}').toList();
-    _cookieJar.saveFromResponse(Uri.parse('https://www.lanzou.com'), cookieList.map((c) => Cookie.fromSetCookieValue(c)).toList());
+    _cookieStr = cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
     return DriveAccount(id: 'lanzou_${DateTime.now().millisecondsSinceEpoch}', type: DriveType.lanzou, displayName: '蓝奏云用户', addedAt: DateTime.now());
   }
 
-  String get _cookieStr => _cookieJar.loadForRequest(Uri.parse('https://www.lanzou.com')).map((c) => '${c.name}=${c.value}').join('; ');
   Map<String, String> get _headers => {'User-Agent': desktopUA, 'Referer': 'https://www.lanzou.com/', 'Cookie': _cookieStr};
 
   @override
@@ -125,6 +123,6 @@ class LanzouProvider extends BaseDriveProvider {
   @override
   Future<void> logout() async {
     credential.clear();
-    _cookieJar.deleteAll();
+    _cookieStr = "";
   }
 }

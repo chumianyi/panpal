@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:cookie_jar/cookie_jar.dart';
 import '../models/cloud_file.dart';
 import '../models/drive_account.dart';
 import 'base_provider.dart';
@@ -12,7 +11,7 @@ class QuarkProvider extends BaseDriveProvider {
   String get loginUrl => 'https://pan.quark.cn/';
 
   final Dio _dio = Dio();
-  final CookieJar _cookieJar = CookieJar();
+  String _cookieStr = "";
 
   QuarkProvider() {
     _dio.options.baseUrl = 'https://drive-pc.quark.cn';
@@ -26,7 +25,7 @@ class QuarkProvider extends BaseDriveProvider {
     credential = cred;
     final cookies = cred['cookies'] as Map<String, dynamic>? ?? {};
     final cookieList = cookies.entries.map((e) => '${e.key}=${e.value}').toList();
-    _cookieJar.saveFromResponse(Uri.parse('https://pan.quark.cn'), cookieList.map((c) => Cookie.fromSetCookieValue(c)).toList());
+    _cookieStr = cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
     try {
       final info = await getStorageInfo();
       return DriveAccount(id: 'quark_${DateTime.now().millisecondsSinceEpoch}', type: DriveType.quark, displayName: '夸克网盘用户', usedSpace: info.used, totalSpace: info.total, addedAt: DateTime.now());
@@ -35,7 +34,6 @@ class QuarkProvider extends BaseDriveProvider {
     }
   }
 
-  String get _cookieStr => _cookieJar.loadForRequest(Uri.parse('https://pan.quark.cn')).map((c) => '${c.name}=${c.value}').join('; ');
   Map<String, String> get _headers => {'User-Agent': desktopUA, 'Referer': 'https://pan.quark.cn/', 'Cookie': _cookieStr, 'Content-Type': 'application/json'};
 
   @override
@@ -153,6 +151,6 @@ class QuarkProvider extends BaseDriveProvider {
   @override
   Future<void> logout() async {
     credential.clear();
-    _cookieJar.deleteAll();
+    _cookieStr = "";
   }
 }

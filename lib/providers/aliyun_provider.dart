@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:cookie_jar/cookie_jar.dart';
 import '../models/cloud_file.dart';
 import '../models/drive_account.dart';
 import 'base_provider.dart';
@@ -12,7 +11,7 @@ class AliyunProvider extends BaseDriveProvider {
   String get loginUrl => 'https://www.aliyundrive.com/';
 
   final Dio _dio = Dio();
-  final CookieJar _cookieJar = CookieJar();
+  String _cookieStr = "";
   String _accessToken = '';
   String _driveId = '';
 
@@ -29,7 +28,7 @@ class AliyunProvider extends BaseDriveProvider {
     _accessToken = cred['access_token'] as String? ?? cred['token'] as String? ?? '';
     final cookies = cred['cookies'] as Map<String, dynamic>? ?? {};
     final cookieList = cookies.entries.map((e) => '${e.key}=${e.value}').toList();
-    _cookieJar.saveFromResponse(Uri.parse('https://www.aliyundrive.com'), cookieList.map((c) => Cookie.fromSetCookieValue(c)).toList());
+    _cookieStr = cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
     try {
       await _getDriveId();
       final info = await getStorageInfo();
@@ -235,6 +234,6 @@ class AliyunProvider extends BaseDriveProvider {
   Future<void> logout() async {
     credential.clear();
     _accessToken = '';
-    _cookieJar.deleteAll();
+    _cookieStr = "";
   }
 }

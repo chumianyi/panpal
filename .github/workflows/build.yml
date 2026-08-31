@@ -7,14 +7,12 @@ on:
 env:
   FLUTTER_VERSION: '3.24.5'
   JAVA_VERSION: '17'
-  GO_VERSION: '1.24.11'
   GOPEED_VERSION: 'v1.9.3'
-  XMOBILE_VERSION: 'v0.0.0-20241108191957-fa514ef75a0f'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,46 +23,69 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-34 build-tools;34.0.0 ndk;26.1.10909125'
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
-      - name: Install gomobile
+      - name: Extract gopeed native library and Java classes
         run: |
-          export GOTOOLCHAIN=go1.24.11
-          go install golang.org/x/mobile/cmd/gomobile@${{ env.XMOBILE_VERSION }}
-          go install golang.org/x/mobile/cmd/gobind@${{ env.XMOBILE_VERSION }}
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+          set -e
 
-      - name: Clone gopeed
-        run: |
-          git clone --depth 1 --branch ${{ env.GOPEED_VERSION }} https://github.com/GopeedLab/gopeed.git /tmp/gopeed
+          # Download gopeed arm64-v8a APK
+          echo "Downloading gopeed ${{ env.GOPEED_VERSION }} APK..."
+          curl -sL -o /tmp/gopeed.apk \
+            "https://github.com/GopeedLab/gopeed/releases/download/${{ env.GOPEED_VERSION }}/Gopeed-${{ env.GOPEED_VERSION }}-android-arm64-v8a.apk"
+          ls -la /tmp/gopeed.apk
 
-      - name: Build gopeed AAR
-        run: |
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          export GOTOOLCHAIN=go1.24.11
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
-          export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125
-          mkdir -p /tmp/gopeed-bind
-          cd /tmp/gopeed-bind
-          printf 'module gopeed-bind\n\ngo 1.24.9\ntoolchain go1.24.11\n\nrequire github.com/GopeedLab/gopeed v1.9.3\nrequire golang.org/x/mobile v0.0.0-20241108191957-fa514ef75a0f\n' > go.mod
-          go mod edit -replace github.com/GopeedLab/gopeed=/tmp/gopeed
-          go mod download
-          go mod tidy
-          gomobile bind -tags nosqlite -ldflags="-w -s" -o /tmp/libgopeed.aar -target=android/arm64 -androidapi 21 -javapkg="com.gopeed" github.com/GopeedLab/gopeed/bind/mobile
-          ls -la /tmp/libgopeed.aar
+          # Extract native library (.so)
+          echo "Extracting native library..."
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          unzip -o /tmp/gopeed.apk "lib/arm64-v8a/*.so" -d /tmp/gopeed-extract
+          cp /tmp/gopeed-extract/lib/arm64-v8a/*.so android/app/src/main/jniLibs/arm64-v8a/
+          ls -la android/app/src/main/jniLibs/arm64-v8a/
 
-      - name: Copy gopeed AAR to project
-        run: |
-          cp /tmp/libgopeed.aar android/app/libs/libgopeed.aar
+          # Extract classes.dex files
+          echo "Extracting classes.dex..."
+          unzip -o /tmp/gopeed.apk "classes*.dex" -d /tmp/gopeed-dex
+          ls -la /tmp/gopeed-dex/
+
+          # Download dex2jar
+          echo "Downloading dex2jar..."
+          curl -sL -o /tmp/dex2jar.zip \
+            "https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip"
+          unzip -o /tmp/dex2jar.zip -d /tmp/dex2jar
+          D2J=$(find /tmp/dex2jar -name "d2j-dex2jar.sh" -type f | head -1)
+          chmod +x $D2J
+          echo "Using dex2jar: $D2J"
+
+          # Convert each classes.dex to jar and merge
+          mkdir -p /tmp/gopeed-jars
+          for dex in /tmp/gopeed-dex/classes*.dex; do
+            echo "Converting $dex..."
+            $D2J -f -o "/tmp/gopeed-jars/$(basename $dex .dex).jar" "$dex" 2>&1 || true
+          done
+          ls -la /tmp/gopeed-jars/
+
+          # Merge all jars into one (use jar command)
+          mkdir -p /tmp/gopeed-merged
+          cd /tmp/gopeed-merged
+          for jar in /tmp/gopeed-jars/*.jar; do
+            jar xf "$jar" 2>/dev/null || true
+          done
+          # Remove Flutter and other non-gopeed classes to avoid conflicts
+          # Keep only com/gopeed and golang/org/x/mobile/bind
+          find . -type f -name "*.class" | grep -v "com/gopeed" | grep -v "golang" | xargs rm -f 2>/dev/null || true
+          find . -type d -empty -delete 2>/dev/null || true
+          jar cf /tmp/gopeed-classes.jar .
+          cd -
+          ls -la /tmp/gopeed-classes.jar
+
+          # Copy to project libs
+          cp /tmp/gopeed-classes.jar android/app/libs/gopeed-classes.jar
           ls -la android/app/libs/
+
+          echo "=== gopeed extraction complete ==="
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2

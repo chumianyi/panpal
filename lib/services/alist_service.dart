@@ -32,16 +32,37 @@ class AListService {
     }
     final binary = File(p.join(alistDir.path, 'alist'));
     if (!await binary.exists()) {
+      // ignore: avoid_print
+      print('[AList] 二进制不存在，开始从 assets 复制并合并分片...');
       // Combine split binary parts from assets
       final parts = ['assets/alist/alist.partaa', 'assets/alist/alist.partab'];
       final bytesBuilder = BytesBuilder();
       for (final part in parts) {
-        final bytes = await rootBundle.load(part);
-        bytesBuilder.add(bytes.buffer.asUint8List());
+        try {
+          // ignore: avoid_print
+          print('[AList] 加载分片: $part');
+          final bytes = await rootBundle.load(part);
+          // ignore: avoid_print
+          print('[AList] 分片 $part 大小: ${bytes.lengthInBytes} 字节');
+          bytesBuilder.add(bytes.buffer.asUint8List());
+        } catch (e) {
+          // ignore: avoid_print
+          print('[AList] 加载分片失败 $part: $e');
+          throw Exception('无法加载 AList 二进制分片 $part: $e');
+        }
       }
       await binary.writeAsBytes(bytesBuilder.toBytes());
+      final finalSize = await binary.length();
+      // ignore: avoid_print
+      print('[AList] 二进制合并完成，大小: $finalSize 字节 (${(finalSize / 1024 / 1024).toStringAsFixed(1)}MB)');
+    } else {
+      final existingSize = await binary.length();
+      // ignore: avoid_print
+      print('[AList] 二进制已存在，大小: $existingSize 字节');
     }
     await Process.run('chmod', ['+x', binary.path]);
+    // ignore: avoid_print
+    print('[AList] 二进制权限已设置为可执行');
   }
 
   Future<String> get binaryPath async {
@@ -60,13 +81,25 @@ class AListService {
     if (_isRunning) return;
     _port = port;
 
+    // 确保二进制存在（双重保障：即使 init() 未被调用也能自动初始化）
+    await _ensureBinary();
+
     final binPath = await binaryPath;
     final dataPath = await dataDir;
 
     final binaryFile = File(binPath);
     if (!await binaryFile.exists()) {
-      throw Exception('AList 二进制文件不存在，请先初始化');
+      throw Exception('AList 二进制文件不存在，初始化失败');
     }
+
+    // 验证文件大小
+    final fileSize = await binaryFile.length();
+    if (fileSize < 1000000) {
+      throw Exception('AList 二进制文件损坏（大小: $fileSize 字节）');
+    }
+
+    // ignore: avoid_print
+    print('[AList] 启动服务: $binPath, 端口: $port, 大小: ${(fileSize / 1024 / 1024).toStringAsFixed(1)}MB');
 
     _process = await Process.start(
       binPath,

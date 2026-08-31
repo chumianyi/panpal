@@ -40,6 +40,8 @@ class _PanPalAppState extends State<PanPalApp> {
     await credStorage.init();
     await _chumianService.init();
     await NotificationService.init();
+    // 初始化 AList（从 assets 复制二进制分片并合并）
+    await _alistService.init();
     if (!mounted) return;
     setState(() {
       _themeMode = settings.themeMode;

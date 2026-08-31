@@ -70,7 +70,7 @@ class ParserService {
       fileName = fileName.replaceAll(RegExp(r'[-_]?(网盘|云盘|分享).*$'), '').trim();
 
       // Try to find direct download URL in the page
-      final directMatch = RegExp(r"(https?://[^\s\"'<>]+\.(?:zip|rar|7z|apk|exe|mp4|mkv|mp3|flac|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|iso|img|tar|gz)[^\s\"'<>]*)",
+      final directMatch = RegExp(r'''(https?://[^\s"'<>]+\.(?:zip|rar|7z|apk|exe|mp4|mkv|mp3|flac|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|iso|img|tar|gz)[^\s"'<>]*)''',
               caseSensitive: false)
           .firstMatch(html);
       if (directMatch != null) {

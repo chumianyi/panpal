@@ -9,6 +9,7 @@ env:
   JAVA_VERSION: '17'
   GO_VERSION: '1.24.11'
   GOPEED_VERSION: 'v1.9.3'
+  XMOBILE_VERSION: 'v0.0.0-20240404231514-09dbf07665ee'
 
 jobs:
   build:
@@ -36,8 +37,9 @@ jobs:
 
       - name: Install gomobile
         run: |
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          go install golang.org/x/mobile/cmd/gobind@latest
+          export GOTOOLCHAIN=go1.24.11
+          go install golang.org/x/mobile/cmd/gomobile@${{ env.XMOBILE_VERSION }}
+          go install golang.org/x/mobile/cmd/gobind@${{ env.XMOBILE_VERSION }}
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
           export PATH="$(go env GOPATH)/bin:$PATH"
           gomobile init
@@ -49,11 +51,12 @@ jobs:
       - name: Build gopeed AAR
         run: |
           export PATH="$(go env GOPATH)/bin:$PATH"
+          export GOTOOLCHAIN=go1.24.11
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125
           cd /tmp/gopeed
           go mod download
-          go get -tool golang.org/x/mobile/cmd/gobind
+          go get -tool golang.org/x/mobile/cmd/gobind@${{ env.XMOBILE_VERSION }}
           gomobile bind -tags nosqlite -ldflags="-w -s" \
             -o /tmp/libgopeed.aar \
             -target=android/arm64 \

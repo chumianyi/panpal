@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:http_parser/http_parser.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -218,20 +217,30 @@ class ChumianDriveService {
     }
 
     final boundary = contentType.parameters['boundary']!;
-    final transformer = MimeMultipartTransformer(boundary);
-    final parts = await transformer.bind(request).toList();
+    final bodyBytes = await request.expand((chunk) => chunk).toList();
+    final bodyStr = utf8.decode(bodyBytes, allowMalformed: true);
 
     String? fileName;
     List<int> fileBytes = [];
 
+    // Manual multipart parsing
+    final boundaryMarker = '--$boundary';
+    final parts = bodyStr.split(boundaryMarker);
     for (final part in parts) {
-      final contentDisposition = part.headers['content-disposition'] ?? '';
-      final nameMatch = RegExp(r'name="([^"]+)"').firstMatch(contentDisposition);
-      final filenameMatch = RegExp(r'filename="([^"]+)"').firstMatch(contentDisposition);
-
-      if (nameMatch?.group(1) == 'file' && filenameMatch != null) {
+      if (part.isEmpty || part == '--\r\n' || part == '--') continue;
+      final headerEnd = part.indexOf('\r\n\r\n');
+      if (headerEnd == -1) continue;
+      final headers = part.substring(0, headerEnd);
+      final filenameMatch = RegExp(r'filename="([^"]+)"').firstMatch(headers);
+      if (filenameMatch != null) {
         fileName = filenameMatch.group(1);
-        fileBytes = await part.expand((chunk) => chunk).toList();
+        // Body starts after \r\n\r\n, ends with \r\n
+        var bodyStart = headerEnd + 4;
+        var bodyEnd = part.length;
+        if (part.endsWith('\r\n')) bodyEnd -= 2;
+        final partBodyStr = part.substring(bodyStart, bodyEnd);
+        fileBytes = utf8.encode(partBodyStr);
+        break;
       }
     }
 

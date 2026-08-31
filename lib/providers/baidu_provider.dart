@@ -7,6 +7,7 @@ import 'base_provider.dart';
 class BaiduProvider extends BaseDriveProvider {
   @override
   DriveType get type => DriveType.baidu;
+
   @override
   String get loginUrl => 'https://pan.baidu.com/';
 
@@ -20,11 +21,21 @@ class BaiduProvider extends BaseDriveProvider {
     _dio.options.receiveTimeout = const Duration(seconds: 30);
   }
 
+  Map<String, String> get _headers => {
+        'User-Agent': desktopUA,
+        'Referer': 'https://pan.baidu.com/',
+        'Cookie': _cookieStr,
+      };
+
   @override
   Future<DriveAccount?> parseCredential(Map<String, dynamic> cred) async {
     credential = cred;
     final cookies = cred['cookies'] as Map<String, dynamic>? ?? {};
     _cookieStr = cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+    if (_cookieStr.isEmpty && (cred['cookie'] as String? ?? '').isNotEmpty) {
+      _cookieStr = cred['cookie'] as String;
+    }
+    if (_cookieStr.isEmpty) return null;
     try {
       final info = await getStorageInfo();
       return DriveAccount(
@@ -34,6 +45,7 @@ class BaiduProvider extends BaseDriveProvider {
         usedSpace: info.used,
         totalSpace: info.total,
         addedAt: DateTime.now(),
+        credential: cred,
       );
     } catch (_) {
       return DriveAccount(
@@ -41,15 +53,17 @@ class BaiduProvider extends BaseDriveProvider {
         type: DriveType.baidu,
         displayName: '百度网盘用户',
         addedAt: DateTime.now(),
+        credential: cred,
       );
     }
   }
 
-  Map<String, String> get _headers => {
-    'User-Agent': desktopUA,
-    'Referer': 'https://pan.baidu.com/',
-    'Cookie': _cookieStr,
-  };
+  @override
+  Future<DriveAccount?> parseCookie(String cookieStr) async {
+    _cookieStr = cookieStr;
+    final cred = {'cookie': cookieStr, 'loginType': 'cookie'};
+    return parseCredential(cred);
+  }
 
   @override
   Future<List<CloudFile>> listFiles({String path = '/', String? fileId}) async {
@@ -76,13 +90,15 @@ class BaiduProvider extends BaseDriveProvider {
           name: item['server_filename'] ?? item['filename'] ?? '',
           isDir: isDir,
           size: item['size'] ?? 0,
-          modifiedAt: item['server_mtime'] != null ? DateTime.fromMillisecondsSinceEpoch((item['server_mtime'] as int) * 1000) : null,
+          modifiedAt: item['server_mtime'] != null
+              ? DateTime.fromMillisecondsSinceEpoch((item['server_mtime'] as int) * 1000)
+              : null,
           path: item['path'] ?? '$path/${item['server_filename']}',
           fileId: item['fs_id']?.toString(),
           raw: Map<String, dynamic>.from(item),
         );
       }).toList();
-    } catch (e) {
+    } catch (_) {
       return [];
     }
   }
@@ -97,16 +113,20 @@ class BaiduProvider extends BaseDriveProvider {
       );
       final data = resp.data is String ? jsonDecode(resp.data) : resp.data;
       final list = data['list'] as List? ?? [];
-      return list.map((item) => CloudFile(
-        id: item['fs_id']?.toString() ?? '',
-        name: item['server_filename'] ?? '',
-        isDir: item['isdir'] == 1,
-        size: item['size'] ?? 0,
-        modifiedAt: item['server_mtime'] != null ? DateTime.fromMillisecondsSinceEpoch((item['server_mtime'] as int) * 1000) : null,
-        path: item['path'] ?? '',
-        fileId: item['fs_id']?.toString(),
-        raw: Map<String, dynamic>.from(item),
-      )).toList();
+      return list
+          .map((item) => CloudFile(
+                id: item['fs_id']?.toString() ?? '',
+                name: item['server_filename'] ?? '',
+                isDir: item['isdir'] == 1,
+                size: item['size'] ?? 0,
+                modifiedAt: item['server_mtime'] != null
+                    ? DateTime.fromMillisecondsSinceEpoch((item['server_mtime'] as int) * 1000)
+                    : null,
+                path: item['path'] ?? '',
+                fileId: item['fs_id']?.toString(),
+                raw: Map<String, dynamic>.from(item),
+              ))
+          .toList();
     } catch (_) {
       return [];
     }
@@ -117,13 +137,18 @@ class BaiduProvider extends BaseDriveProvider {
     try {
       final resp = await _dio.get(
         'https://pan.baidu.com/api/download',
-        queryParameters: {'fidlist': '[{"fid":${file.fileId}}]', 'type': 'dlink', 'web': 1},
+        queryParameters: {
+          'fidlist': '[{"fid":${file.fileId}}]',
+          'type': 'dlink',
+          'web': 1,
+        },
         options: Options(headers: _headers),
       );
       final data = resp.data is String ? jsonDecode(resp.data) : resp.data;
       final dlink = data['dlink']?[0]?['dlink'] as String?;
       if (dlink != null) {
-        final signResp = await _dio.get(dlink, options: Options(headers: _headers, followRedirects: false, validateStatus: (s) => s! < 400));
+        final signResp = await _dio.get(dlink,
+            options: Options(headers: _headers, followRedirects: false, validateStatus: (s) => s! < 400));
         return signResp.headers.value('location') ?? dlink;
       }
       return '';
@@ -133,44 +158,26 @@ class BaiduProvider extends BaseDriveProvider {
   }
 
   @override
-  Future<bool> uploadFile(String localPath, String remotePath, {Function(double)? onProgress}) async {
-    // Baidu upload requires precreate, superfile2, create API
-    // Simplified implementation
-    try {
-      onProgress?.call(0.1);
-      await Future.delayed(const Duration(milliseconds: 500));
-      onProgress?.call(0.5);
-      await Future.delayed(const Duration(milliseconds: 500));
-      onProgress?.call(1.0);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  @override
   Future<ShareResult> shareFile(CloudFile file, {String? password, int? expireDays}) async {
-    try {
-      final resp = await _dio.post(
-        'https://pan.baidu.com/share/set',
-        data: {
-          'fid_list': '[${file.fileId}]',
-          'schannel': password != null ? 4 : 0,
-          'channel_list': '[]',
-          'pwd': password ?? '',
-          'expiredType': expireDays != null ? 1 : 0,
-          'expiredValue': expireDays ?? 0,
-        },
-        options: Options(headers: {..._headers, 'Content-Type': 'application/x-www-form-urlencoded'}),
-      );
-      final data = resp.data is String ? jsonDecode(resp.data) : resp.data;
-      final link = data['link'] as String?;
-      final pwd = data['pwd'] as String?;
-      if (link != null) {
-        return ShareResult(url: link, password: pwd);
-      }
-    } catch (_) {}
-    return ShareResult(url: 'https://pan.baidu.com/s/1placeholder');
+    final resp = await _dio.post(
+      'https://pan.baidu.com/share/set',
+      data: {
+        'fid_list': '[${file.fileId}]',
+        'schannel': password != null ? 4 : 0,
+        'channel_list': '[]',
+        'pwd': password ?? '',
+        'expiredType': expireDays != null ? 1 : 0,
+        'expiredValue': expireDays ?? 0,
+      },
+      options: Options(headers: {..._headers, 'Content-Type': 'application/x-www-form-urlencoded'}),
+    );
+    final data = resp.data is String ? jsonDecode(resp.data) : resp.data;
+    final link = data['link'] as String?;
+    final pwd = data['pwd'] as String?;
+    if (link != null) {
+      return ShareResult(url: link, password: pwd);
+    }
+    throw Exception('分享失败');
   }
 
   @override

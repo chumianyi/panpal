@@ -1,5 +1,4 @@
 name: Build Release APK
-
 on:
   push:
     branches: [main, master]
@@ -8,10 +7,13 @@ on:
 env:
   FLUTTER_VERSION: '3.24.5'
   JAVA_VERSION: '17'
+  GO_VERSION: '1.22.5'
+  GOPEED_VERSION: 'v1.9.3'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,6 +23,48 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0 ndk;26.1.10909125'
+
+      - name: Install gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          gomobile init
+
+      - name: Clone gopeed
+        run: |
+          git clone --depth 1 --branch ${{ env.GOPEED_VERSION }} https://github.com/GopeedLab/gopeed.git /tmp/gopeed
+
+      - name: Build gopeed AAR
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.1.10909125
+          cd /tmp/gopeed
+          go mod download
+          gomobile bind -tags nosqlite -ldflags="-w -s" \
+            -o /tmp/libgopeed.aar \
+            -target=android/arm64 \
+            -androidapi 21 \
+            -javapkg="com.gopeed" \
+            github.com/GopeedLab/gopeed/bind/mobile
+          ls -la /tmp/libgopeed.aar
+
+      - name: Copy gopeed AAR to project
+        run: |
+          cp /tmp/libgopeed.aar android/app/libs/libgopeed.aar
+          ls -la android/app/libs/
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -42,7 +86,7 @@ jobs:
         run: flutter build apk --release --target-platform android-arm64
 
       - name: Rename APK
-        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/PanPal-v1.0.0-arm64-v8a.apk
+        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/PanPal-v2.0.0-arm64-v8a.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4

@@ -7,13 +7,15 @@ import 'base_provider.dart';
 class AliyunProvider extends BaseDriveProvider {
   @override
   DriveType get type => DriveType.aliyun;
+
   @override
   String get loginUrl => 'https://www.aliyundrive.com/';
 
   final Dio _dio = Dio();
-  String _cookieStr = "";
   String _accessToken = '';
+  String _refreshToken = '';
   String _driveId = '';
+  String _cookieStr = '';
 
   AliyunProvider() {
     _dio.options.baseUrl = 'https://api.aliyundrive.com';
@@ -22,13 +24,33 @@ class AliyunProvider extends BaseDriveProvider {
     _dio.options.receiveTimeout = const Duration(seconds: 30);
   }
 
+  Map<String, String> get _headers => {
+        'Authorization': 'Bearer $_accessToken',
+        'User-Agent': desktopUA,
+        'Content-Type': 'application/json',
+        'Referer': 'https://www.aliyundrive.com/',
+        if (_cookieStr.isNotEmpty) 'Cookie': _cookieStr,
+      };
+
   @override
   Future<DriveAccount?> parseCredential(Map<String, dynamic> cred) async {
     credential = cred;
     _accessToken = cred['access_token'] as String? ?? cred['token'] as String? ?? '';
+    _refreshToken = cred['refresh_token'] as String? ?? '';
     final cookies = cred['cookies'] as Map<String, dynamic>? ?? {};
-    final cookieList = cookies.entries.map((e) => '${e.key}=${e.value}').toList();
     _cookieStr = cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+    if (_cookieStr.isEmpty && (cred['cookie'] as String? ?? '').isNotEmpty) {
+      _cookieStr = cred['cookie'] as String;
+    }
+    if (_accessToken.isEmpty && _cookieStr.isEmpty) return null;
+
+    // Try refresh token if access token is empty
+    if (_accessToken.isEmpty && _refreshToken.isNotEmpty) {
+      try {
+        await _refreshAccessToken();
+      } catch (_) {}
+    }
+
     try {
       await _getDriveId();
       final info = await getStorageInfo();
@@ -39,6 +61,7 @@ class AliyunProvider extends BaseDriveProvider {
         usedSpace: info.used,
         totalSpace: info.total,
         addedAt: DateTime.now(),
+        credential: cred,
       );
     } catch (_) {
       return DriveAccount(
@@ -46,8 +69,27 @@ class AliyunProvider extends BaseDriveProvider {
         type: DriveType.aliyun,
         displayName: '阿里云盘用户',
         addedAt: DateTime.now(),
+        credential: cred,
       );
     }
+  }
+
+  @override
+  Future<DriveAccount?> parseCookie(String cookieStr) async {
+    _cookieStr = cookieStr;
+    final cred = {'cookie': cookieStr, 'loginType': 'cookie'};
+    return parseCredential(cred);
+  }
+
+  Future<void> _refreshAccessToken() async {
+    final resp = await _dio.post(
+      'https://auth.aliyundrive.com/v2/account/token',
+      data: {'grant_type': 'refresh_token', 'refresh_token': _refreshToken},
+      options: Options(headers: {'Content-Type': 'application/json', 'User-Agent': desktopUA}),
+    );
+    final data = resp.data is String ? jsonDecode(resp.data) : resp.data;
+    _accessToken = data['access_token'] ?? '';
+    _refreshToken = data['refresh_token'] ?? '';
   }
 
   Future<void> _getDriveId() async {
@@ -61,13 +103,6 @@ class AliyunProvider extends BaseDriveProvider {
       _driveId = data['default_drive_id'] ?? '';
     } catch (_) {}
   }
-
-  Map<String, String> get _headers => {
-    'Authorization': 'Bearer $_accessToken',
-    'User-Agent': desktopUA,
-    'Content-Type': 'application/json',
-    'Referer': 'https://www.aliyundrive.com/',
-  };
 
   @override
   Future<List<CloudFile>> listFiles({String path = '/', String? fileId}) async {
@@ -117,16 +152,18 @@ class AliyunProvider extends BaseDriveProvider {
       );
       final data = resp.data is String ? jsonDecode(resp.data) : resp.data;
       final items = data['items'] as List? ?? [];
-      return items.map((item) => CloudFile(
-        id: item['file_id'] ?? '',
-        name: item['name'] ?? '',
-        isDir: item['type'] == 'folder',
-        size: item['size'] ?? 0,
-        modifiedAt: item['updated_at'] != null ? DateTime.tryParse(item['updated_at']) : null,
-        path: '',
-        fileId: item['file_id'],
-        raw: Map<String, dynamic>.from(item),
-      )).toList();
+      return items
+          .map((item) => CloudFile(
+                id: item['file_id'] ?? '',
+                name: item['name'] ?? '',
+                isDir: item['type'] == 'folder',
+                size: item['size'] ?? 0,
+                modifiedAt: item['updated_at'] != null ? DateTime.tryParse(item['updated_at']) : null,
+                path: '',
+                fileId: item['file_id'],
+                raw: Map<String, dynamic>.from(item),
+              ))
+          .toList();
     } catch (_) {
       return [];
     }
@@ -148,41 +185,25 @@ class AliyunProvider extends BaseDriveProvider {
   }
 
   @override
-  Future<bool> uploadFile(String localPath, String remotePath, {Function(double)? onProgress}) async {
-    try {
-      onProgress?.call(0.1);
-      await Future.delayed(const Duration(milliseconds: 300));
-      onProgress?.call(0.5);
-      await Future.delayed(const Duration(milliseconds: 300));
-      onProgress?.call(1.0);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  @override
   Future<ShareResult> shareFile(CloudFile file, {String? password, int? expireDays}) async {
-    try {
-      final resp = await _dio.post(
-        'https://api.aliyundrive.com/adrive/v2/share_link/create',
-        data: {
-          'drive_id': _driveId,
-          'file_id_list': [file.fileId],
-          'share_pwd': password ?? '',
-          'expiration': expireDays != null ? '${expireDays}d' : '',
-          'share_msg': '',
-        },
-        options: Options(headers: _headers),
-      );
-      final data = resp.data is String ? jsonDecode(resp.data) : resp.data;
-      final shareUrl = data['share_url'] as String?;
-      final sharePwd = data['share_pwd'] as String?;
-      if (shareUrl != null) {
-        return ShareResult(url: shareUrl, password: sharePwd);
-      }
-    } catch (_) {}
-    return ShareResult(url: 'https://www.aliyundrive.com/s/placeholder');
+    final resp = await _dio.post(
+      'https://api.aliyundrive.com/adrive/v2/share_link/create',
+      data: {
+        'drive_id': _driveId,
+        'file_id_list': [file.fileId],
+        'share_pwd': password ?? '',
+        'expiration': expireDays != null ? '${expireDays}d' : '',
+        'share_msg': '',
+      },
+      options: Options(headers: _headers),
+    );
+    final data = resp.data is String ? jsonDecode(resp.data) : resp.data;
+    final shareUrl = data['share_url'] as String?;
+    final sharePwd = data['share_pwd'] as String?;
+    if (shareUrl != null) {
+      return ShareResult(url: shareUrl, password: sharePwd);
+    }
+    throw Exception('分享失败');
   }
 
   @override
@@ -234,6 +255,8 @@ class AliyunProvider extends BaseDriveProvider {
   Future<void> logout() async {
     credential.clear();
     _accessToken = '';
-    _cookieStr = "";
+    _refreshToken = '';
+    _driveId = '';
+    _cookieStr = '';
   }
 }

@@ -11,12 +11,11 @@ class DownloadScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final downloadService = context.watch<DownloadService>();
     final tasks = downloadService.tasks;
-
     return DefaultTabController(
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('下载管理'),
+          title: const Text('下载管理', style: TextStyle(fontWeight: FontWeight.bold)),
           bottom: const TabBar(
             tabs: [Tab(text: '下载中'), Tab(text: '已完成')],
           ),
@@ -62,11 +61,14 @@ class DownloadScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(task.fileName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          Text(task.fileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                           const SizedBox(height: 2),
                           Text(
                             task.status == DownloadStatus.downloading
-                                ? '${FormatUtils.fileSize(task.downloadedSize)} / ${FormatUtils.fileSize(task.totalSize)} · ${FormatUtils.speed(task.speed)} · ${task.connections}连接'
+                                ? '${FormatUtils.fileSize(task.downloadedSize)} / ${FormatUtils.fileSize(task.totalSize)} · ${FormatUtils.speed(task.speed)}'
                                 : task.status == DownloadStatus.paused
                                     ? '已暂停 · ${FormatUtils.fileSize(task.downloadedSize)} / ${FormatUtils.fileSize(task.totalSize)}'
                                     : task.status == DownloadStatus.completed
@@ -87,8 +89,10 @@ class DownloadScreen extends StatelessWidget {
                           if (v == 'cancel') service.cancelTask(task.id);
                         },
                         itemBuilder: (context) => [
-                          if (task.status == DownloadStatus.downloading) const PopupMenuItem(value: 'pause', child: Text('暂停')),
-                          if (task.status == DownloadStatus.paused) const PopupMenuItem(value: 'resume', child: Text('继续')),
+                          if (task.status == DownloadStatus.downloading)
+                            const PopupMenuItem(value: 'pause', child: Text('暂停')),
+                          if (task.status == DownloadStatus.paused)
+                            const PopupMenuItem(value: 'resume', child: Text('继续')),
                           const PopupMenuItem(value: 'cancel', child: Text('取消')),
                         ],
                       ),
@@ -116,13 +120,28 @@ class DownloadScreen extends StatelessWidget {
   IconData _getFileIcon(String name) {
     final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
     switch (ext) {
-      case 'jpg': case 'jpeg': case 'png': case 'gif': return Icons.image;
-      case 'mp4': case 'mkv': case 'avi': return Icons.movie;
-      case 'mp3': case 'flac': return Icons.music_note;
-      case 'pdf': return Icons.picture_as_pdf;
-      case 'zip': case 'rar': case '7z': return Icons.archive;
-      case 'apk': return Icons.android;
-      default: return Icons.download;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+        return Icons.image;
+      case 'mp4':
+      case 'mkv':
+      case 'avi':
+        return Icons.movie;
+      case 'mp3':
+      case 'flac':
+        return Icons.music_note;
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'zip':
+      case 'rar':
+      case '7z':
+        return Icons.archive;
+      case 'apk':
+        return Icons.android;
+      default:
+        return Icons.download;
     }
   }
 }

@@ -3,14 +3,16 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Cloud shape - white with subtle shadow -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,30 L54,78 M30,54 L78,54"
-        android:strokeWidth="8"
-        android:strokeColor="#FFFFFF"/>
+        android:pathData="M34,68 C26,68 20,62 20,55 C20,49 24,43.5 30,42 C31,35 37,30 44,30 C50,30 55,33.5 57,38 C59,36 62.5,35 66,35 C74,35 80.5,41 80.5,49 C80.5,49.5 80.5,50 80,50.5 C85,51.5 88,56 88,61 C88,67 83,72 77,72 L34,72 Z" />
+    <!-- Cloud highlight - top left lighter area -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M38,40 L70,40 L70,68 L38,68 Z"
-        android:strokeWidth="4"
-        android:strokeColor="#FFFFFF"/>
+        android:fillColor="#E3F2FD"
+        android:pathData="M34,68 C28,68 23,63.5 22,57.5 C22,52 25.5,47.5 30,46 C31,40 36,36 42,36 C46,36 49.5,38 51.5,41 C49,40.5 46.5,40.5 44,41 C38,41.5 33.5,46 33.5,51.5 C33.5,52 33.5,52.5 33.7,53 C30,54 27.5,57 27.5,60.5 C27.5,64.5 30.5,68 34,68 Z" />
+    <!-- Small cloud accent -->
+    <path
+        android:fillColor="#BBDEFB"
+        android:pathData="M68,58 C65,58 62.5,60 62.5,62.5 C62.5,65 65,67 68,67 C71,67 73.5,65 73.5,62.5 C73.5,60 71,58 68,58 Z" />
 </vector>

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -8,7 +7,6 @@ import '../providers/base_provider.dart';
 import '../providers/drive_provider_factory.dart';
 import '../services/credential_storage.dart';
 import '../services/download_service.dart';
-import '../services/upload_service.dart';
 import '../utils/format_utils.dart';
 import '../widgets/file_tile.dart';
 
@@ -25,15 +23,12 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
   final List<CloudFile> _files = [];
   final Set<String> _selectedIds = {};
   final TextEditingController _searchController = TextEditingController();
-  final UploadService _uploadService = UploadService();
-
   String _currentPath = '/';
   String? _currentFileId;
   bool _loading = true;
   bool _searchMode = false;
   String _sortBy = 'time';
   bool _sortDesc = true;
-  Map<String, dynamic>? _credential;
 
   @override
   void initState() {
@@ -44,9 +39,9 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
   Future<void> _initProvider() async {
     _provider = DriveProviderFactory.create(widget.account.type);
     final storage = context.read<CredentialStorage>();
-    _credential = await storage.getCredential(widget.account.id);
-    if (_credential != null) {
-      await _provider.parseCredential(_credential!);
+    final credential = await storage.getCredential(widget.account.id);
+    if (credential != null) {
+      await _provider.parseCredential(credential);
     }
     _loadFiles();
   }
@@ -149,18 +144,17 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
   Future<void> _downloadFile(CloudFile file) async {
     if (file.isDir) return;
     final downloadService = context.read<DownloadService>();
-    final storage = context.read<CredentialStorage>();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('正在获取下载链接: ${file.name}')));
     try {
       final url = await _provider.getDownloadUrl(file);
       if (url.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('获取下载链接失败'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('获取下载链接失败'), backgroundColor: Colors.red));
         return;
       }
       await downloadService.addTask(
         url: url,
         fileName: file.name,
-        connections: storage.defaultConnections,
         headers: {'User-Agent': _provider.desktopUA},
       );
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已添加下载: ${file.name}')));
@@ -224,18 +218,6 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
         ],
       ),
     );
-  }
-
-  Future<void> _upload() async {
-    final files = await _uploadService.pickFiles();
-    if (files == null || files.isEmpty) return;
-    for (final file in files) {
-      await _uploadService.upload(provider: _provider, file: file, remotePath: _currentPath);
-    }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已开始上传 ${files.length} 个文件')));
-      _loadFiles();
-    }
   }
 
   Future<void> _deleteSelected() async {
@@ -339,7 +321,9 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
                               file: file,
                               selected: _selectedIds.contains(file.id),
                               selectMode: isSelectMode,
-                              onTap: () => isSelectMode ? _toggleSelect(file.id) : (file.isDir ? _navigateTo(file) : _showFileOptions(file)),
+                              onTap: () => isSelectMode
+                                  ? _toggleSelect(file.id)
+                                  : (file.isDir ? _navigateTo(file) : _showFileOptions(file)),
                               onLongPress: () => _toggleSelect(file.id),
                               onDownload: () => _downloadFile(file),
                               onShare: () => _shareFile(file),
@@ -348,10 +332,6 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
                         ),
             ),
           ],
-        ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: _upload,
-          child: const Icon(Icons.upload),
         ),
       ),
     );
@@ -364,9 +344,27 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(leading: const Icon(Icons.download), title: const Text('下载'), onTap: () { Navigator.pop(ctx); _downloadFile(file); }),
-            ListTile(leading: const Icon(Icons.share), title: const Text('分享'), onTap: () { Navigator.pop(ctx); _shareFile(file); }),
-            ListTile(leading: const Icon(Icons.delete), title: const Text('删除'), onTap: () { Navigator.pop(ctx); _provider.deleteFiles([file]).then((_) => _loadFiles()); }),
+            ListTile(
+                leading: const Icon(Icons.download),
+                title: const Text('下载'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _downloadFile(file);
+                }),
+            ListTile(
+                leading: const Icon(Icons.share),
+                title: const Text('分享'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _shareFile(file);
+                }),
+            ListTile(
+                leading: const Icon(Icons.delete),
+                title: const Text('删除'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _provider.deleteFiles([file]).then((_) => _loadFiles());
+                }),
           ],
         ),
       ),
@@ -379,7 +377,10 @@ class _FileManagerScreenState extends State<FileManagerScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('新建文件夹'),
-        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(hintText: '文件夹名称')),
+        content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: '文件夹名称')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('创建')),
@@ -433,7 +434,9 @@ class _ShareDialogState extends State<_ShareDialog> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-        FilledButton(onPressed: () => widget.onShare(_pwdController.text.isEmpty ? null : _pwdController.text, _expireDays == 0 ? null : _expireDays), child: const Text('生成分享链接')),
+        FilledButton(
+            onPressed: () => widget.onShare(_pwdController.text.isEmpty ? null : _pwdController.text, _expireDays),
+            child: const Text('分享')),
       ],
     );
   }

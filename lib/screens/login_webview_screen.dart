@@ -2,15 +2,14 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:provider/provider.dart';
 import '../models/drive_account.dart';
 import '../providers/drive_provider_factory.dart';
 import '../services/credential_storage.dart';
 
 class LoginWebViewScreen extends StatefulWidget {
   final DriveType driveType;
-  final CredentialStorage credentialStorage;
-
-  const LoginWebViewScreen({super.key, required this.driveType, required this.credentialStorage});
+  const LoginWebViewScreen({super.key, required this.driveType});
 
   @override
   State<LoginWebViewScreen> createState() => _LoginWebViewScreenState();
@@ -22,7 +21,8 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> {
   bool _saving = false;
   double _progress = 0;
 
-  static const String desktopUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  static const String desktopUA =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
   @override
   void initState() {
@@ -35,16 +35,9 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setUserAgent(desktopUA)
       ..setNavigationDelegate(NavigationDelegate(
-        onPageStarted: (url) {
-          setState(() => _loading = true);
-        },
-        onProgress: (p) {
-          setState(() => _progress = p / 100);
-        },
-        onPageFinished: (url) {
-          setState(() => _loading = false);
-        },
-        onWebResourceError: (error) {},
+        onPageStarted: (url) => setState(() => _loading = true),
+        onProgress: (p) => setState(() => _progress = p / 100),
+        onPageFinished: (url) => setState(() => _loading = false),
       ))
       ..loadRequest(Uri.parse(widget.driveType.loginUrl));
 
@@ -54,36 +47,48 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> {
   }
 
   Future<Map<String, dynamic>> _captureCredentials() async {
-    final cookies = await _controller.runJavaScriptReturningResult('document.cookie') as String? ?? '';
-    final url = await _controller.currentUrl() ?? '';
-    final title = await _controller.getTitle() ?? '';
-
-    // 解析 cookie
+    // Extract cookies using CookieManager
+    final cookieManager = WebViewCookieManager();
+    final cookies = await cookieManager.getCookies(Uri.parse(widget.driveType.loginUrl));
     final cookieMap = <String, String>{};
-    for (final pair in cookies.split(';')) {
-      final idx = pair.indexOf('=');
-      if (idx > 0) {
-        final key = pair.substring(0, idx).trim();
-        final value = pair.substring(idx + 1).trim();
-        if (key.isNotEmpty) cookieMap[key] = value;
-      }
+    for (final c in cookies) {
+      cookieMap[c.name] = c.value;
     }
 
-    // 尝试从 localStorage 获取 token
+    // Also try document.cookie as fallback
+    try {
+      final docCookie = await _controller.runJavaScriptReturningResult('document.cookie') as String? ?? '';
+      for (final pair in docCookie.split(';')) {
+        final idx = pair.indexOf('=');
+        if (idx > 0) {
+          final key = pair.substring(0, idx).trim();
+          final value = pair.substring(idx + 1).trim();
+          if (key.isNotEmpty && !cookieMap.containsKey(key)) {
+            cookieMap[key] = value;
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Try to get token from localStorage
     String? accessToken;
+    String? refreshToken;
     try {
       final ls = await _controller.runJavaScriptReturningResult('JSON.stringify(localStorage)') as String?;
       if (ls != null && ls.isNotEmpty && ls != '{}') {
         final parsed = jsonDecode(ls.replaceAll('\\', ''));
         accessToken = parsed['access_token'] ?? parsed['token'] ?? parsed['accessToken'];
+        refreshToken = parsed['refresh_token'] ?? parsed['refreshToken'];
       }
     } catch (_) {}
 
+    final url = await _controller.currentUrl() ?? '';
     return {
       'cookies': cookieMap,
+      'cookie': cookieMap.entries.map((e) => '${e.key}=${e.value}').join('; '),
       'url': url,
-      'title': title,
       'access_token': accessToken,
+      'refresh_token': refreshToken,
       'userAgent': desktopUA,
       'capturedAt': DateTime.now().toIso8601String(),
     };
@@ -95,9 +100,9 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> {
       final credential = await _captureCredentials();
       final provider = DriveProviderFactory.create(widget.driveType);
       final account = await provider.parseCredential(credential);
-
       if (account != null) {
-        await widget.credentialStorage.addAccount(account, credential);
+        if (!mounted) return;
+        await context.read<CredentialStorage>().addAccount(account, credential);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('${widget.driveType.label} 登录成功'), backgroundColor: Colors.green),

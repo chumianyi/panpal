@@ -7,115 +7,55 @@ import 'base_provider.dart';
 class LanzouProvider extends BaseDriveProvider {
   @override
   DriveType get type => DriveType.lanzou;
+
   @override
   String get loginUrl => 'https://www.lanzou.com/';
 
   final Dio _dio = Dio();
-  String _cookieStr = "";
 
   LanzouProvider() {
-    _dio.options.baseUrl = 'https://www.lanzou.com';
-    _dio.options.headers['User-Agent'] = desktopUA;
     _dio.options.connectTimeout = const Duration(seconds: 30);
     _dio.options.receiveTimeout = const Duration(seconds: 30);
+    _dio.options.headers['User-Agent'] = desktopUA;
   }
 
   @override
   Future<DriveAccount?> parseCredential(Map<String, dynamic> cred) async {
     credential = cred;
-    final cookies = cred['cookies'] as Map<String, dynamic>? ?? {};
-    final cookieList = cookies.entries.map((e) => '${e.key}=${e.value}').toList();
-    _cookieStr = cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
-    return DriveAccount(id: 'lanzou_${DateTime.now().millisecondsSinceEpoch}', type: DriveType.lanzou, displayName: '蓝奏云用户', addedAt: DateTime.now());
-  }
-
-  Map<String, String> get _headers => {'User-Agent': desktopUA, 'Referer': 'https://www.lanzou.com/', 'Cookie': _cookieStr};
-
-  @override
-  Future<List<CloudFile>> listFiles({String path = '/', String? fileId}) async {
-    try {
-      final resp = await _dio.get(
-        'https://www.lanzou.com/filemoreajax.php',
-        queryParameters: {'uid': fileId ?? '', 'pg': 1, 'k': '', 't': '-1', 'o': '1'},
-        options: Options(headers: _headers),
-      );
-      final data = resp.data is String ? jsonDecode(resp.data) : resp.data;
-      final list = data['text'] as List? ?? [];
-      return list.map((item) => CloudFile(
-        id: item['id']?.toString() ?? '', name: item['name_all'] ?? item['name'] ?? '',
-        isDir: item['icon'] == 'folder' || (item['name_all']?.toString().contains('.') != true && item['size'] == null),
-        size: int.tryParse(item['size']?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '0') ?? 0,
-        modifiedAt: item['time'] != null ? DateTime.tryParse(item['time'].toString()) : null,
-        path: path, fileId: item['id']?.toString(), raw: Map<String, dynamic>.from(item),
-      )).toList();
-    } catch (_) {
-      return [];
-    }
+    return DriveAccount(
+      id: 'lanzou_${DateTime.now().millisecondsSinceEpoch}',
+      type: DriveType.lanzou,
+      displayName: '蓝奏云解析',
+      addedAt: DateTime.now(),
+      credential: cred,
+    );
   }
 
   @override
-  Future<List<CloudFile>> searchFiles(String keyword, {String path = '/'}) async {
-    try {
-      final resp = await _dio.get('https://www.lanzou.com/filemoreajax.php', queryParameters: {'pg': 1, 'k': keyword, 't': '-1', 'o': '1'}, options: Options(headers: _headers));
-      final data = resp.data is String ? jsonDecode(resp.data) : resp.data;
-      final list = data['text'] as List? ?? [];
-      return list.map((item) => CloudFile(id: item['id']?.toString() ?? '', name: item['name_all'] ?? '', isDir: false, size: 0, path: '', fileId: item['id']?.toString(), raw: Map<String, dynamic>.from(item))).toList();
-    } catch (_) {
-      return [];
-    }
+  Future<DriveAccount?> parseCookie(String cookieStr) async {
+    final cred = {'cookie': cookieStr, 'loginType': 'cookie'};
+    return parseCredential(cred);
   }
 
   @override
-  Future<String> getDownloadUrl(CloudFile file) async {
-    try {
-      final resp = await _dio.get('https://www.lanzou.com/${file.fileId}', options: Options(headers: _headers));
-      // Parse download URL from page
-      return '';
-    } catch (_) {
-      return '';
-    }
-  }
+  Future<List<CloudFile>> listFiles({String path = '/', String? fileId}) async => [];
 
   @override
-  Future<bool> uploadFile(String localPath, String remotePath, {Function(double)? onProgress}) async {
-    try {
-      onProgress?.call(0.3);
-      await Future.delayed(const Duration(milliseconds: 300));
-      onProgress?.call(0.7);
-      await Future.delayed(const Duration(milliseconds: 300));
-      onProgress?.call(1.0);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
+  Future<List<CloudFile>> searchFiles(String keyword, {String path = '/'}) async => [];
+
+  @override
+  Future<String> getDownloadUrl(CloudFile file) async => '';
 
   @override
   Future<ShareResult> shareFile(CloudFile file, {String? password, int? expireDays}) async {
-    return ShareResult(url: 'https://www.lanzou.com/${file.fileId}', password: password);
+    throw Exception('蓝奏云不支持分享');
   }
 
   @override
-  Future<bool> deleteFiles(List<CloudFile> files) async {
-    try {
-      for (final f in files) {
-        await _dio.post('https://www.lanzou.com/deletefile.php', data: {'file_id': f.fileId}, options: Options(headers: {..._headers, 'Content-Type': 'application/x-www-form-urlencoded'}));
-      }
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
+  Future<bool> deleteFiles(List<CloudFile> files) async => false;
 
   @override
-  Future<bool> createFolder(String path, String name) async {
-    try {
-      await _dio.post('https://www.lanzou.com/createfolder.php', data: {'folder_name': name}, options: Options(headers: {..._headers, 'Content-Type': 'application/x-www-form-urlencoded'}));
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
+  Future<bool> createFolder(String path, String name) async => false;
 
   @override
   Future<StorageInfo> getStorageInfo() async => const StorageInfo();
@@ -123,6 +63,128 @@ class LanzouProvider extends BaseDriveProvider {
   @override
   Future<void> logout() async {
     credential.clear();
-    _cookieStr = "";
   }
+
+  Future<ParseResult> parseShareUrl(String url, {String? password}) async {
+    try {
+      // Normalize URL
+      var shareUrl = url.trim();
+      if (!shareUrl.startsWith('http')) shareUrl = 'https://$shareUrl';
+
+      final resp = await _dio.get(
+        shareUrl,
+        options: Options(headers: {
+          'User-Agent': desktopUA,
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'zh-CN,zh;q=0.9',
+        }),
+      );
+
+      final html = resp.data.toString();
+
+      // Extract file name
+      final nameMatch = RegExp(r'<title>(.*?)</title>', dotAll: true).firstMatch(html);
+      var fileName = nameMatch?.group(1)?.trim() ?? '未知文件';
+      fileName = fileName.replaceAll(RegExp(r'[-_]?蓝奏云.*$'), '').trim();
+
+      // Extract file size
+      var fileSize = 0;
+      final sizeMatch = RegExp(r'(\d+(?:\.\d+)?)\s*(KB|MB|GB|B)', caseSensitive: false).firstMatch(html);
+      if (sizeMatch != null) {
+        final num = double.parse(sizeMatch.group(1)!);
+        final unit = sizeMatch.group(2)!.toUpperCase();
+        fileSize = switch (unit) {
+          'GB' => (num * 1024 * 1024 * 1024).toInt(),
+          'MB' => (num * 1024 * 1024).toInt(),
+          'KB' => (num * 1024).toInt(),
+          _ => num.toInt(),
+        };
+      }
+
+      // Extract iframe src for download
+      final iframeMatch = RegExp(r'<iframe[^>]*src="([^"]*)"[^>]*name="[^"]*"', dotAll: true).firstMatch(html);
+      String? iframeSrc = iframeMatch?.group(1);
+      if (iframeSrc != null && iframeSrc.startsWith('/')) {
+        final uri = Uri.parse(shareUrl);
+        iframeSrc = '${uri.scheme}://${uri.host}$iframeSrc';
+      }
+
+      if (iframeSrc == null) {
+        // Try alternative: find the download form action
+        final formMatch = RegExp(r'action="([^"]*ajaxm\.php[^"]*)"', dotAll: true).firstMatch(html);
+        iframeSrc = formMatch?.group(1);
+      }
+
+      if (iframeSrc == null) {
+        throw Exception('无法解析下载页面');
+      }
+
+      // Get the iframe page to find the actual download parameters
+      final iframeResp = await _dio.get(
+        iframeSrc,
+        options: Options(headers: {
+          'User-Agent': desktopUA,
+          'Referer': shareUrl,
+        }),
+      );
+      final iframeHtml = iframeResp.data.toString();
+
+      // Extract sign and parameters from the iframe
+      final signMatch = RegExp(r"var\s+ajaxdata\s*=\s*'([^']*)'", dotAll: true).firstMatch(iframeHtml);
+      var ajaxData = signMatch?.group(1) ?? '';
+
+      if (ajaxData.isEmpty) {
+        // Try alternative pattern
+        final altMatch = RegExp(r'name="(\w+)"\s+value="([^"]*)"', dotAll: true).allMatches(iframeHtml);
+        final params = <String, String>{};
+        for (final m in altMatch) {
+          params[m.group(1)!] = m.group(2)!;
+        }
+        ajaxData = params.entries.map((e) => '${e.key}=${e.value}').join('&');
+      }
+
+      // POST to ajaxm.php to get the download URL
+      final host = Uri.parse(shareUrl).host;
+      final ajaxUrl = 'https://$host/ajaxm.php';
+      final ajaxResp = await _dio.post(
+        ajaxUrl,
+        data: ajaxData,
+        options: Options(headers: {
+          'User-Agent': desktopUA,
+          'Referer': iframeSrc,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        }),
+      );
+
+      final ajaxDataResp = ajaxResp.data is String ? jsonDecode(ajaxResp.data) : ajaxResp.data;
+      final downUrl = ajaxDataResp['url'] as String? ?? '';
+
+      if (downUrl.isEmpty) {
+        throw Exception('无法获取真实下载地址');
+      }
+
+      return ParseResult(
+        fileName: fileName,
+        fileSize: fileSize,
+        downloadUrl: downUrl,
+        sourceUrl: shareUrl,
+      );
+    } catch (e) {
+      throw Exception('蓝奏云解析失败: $e');
+    }
+  }
+}
+
+class ParseResult {
+  final String fileName;
+  final int fileSize;
+  final String downloadUrl;
+  final String sourceUrl;
+
+  const ParseResult({
+    required this.fileName,
+    required this.fileSize,
+    required this.downloadUrl,
+    required this.sourceUrl,
+  });
 }

@@ -6,7 +6,6 @@ import 'pan123_provider.dart';
 import 'quark_provider.dart';
 import 'tianyi_provider.dart';
 import 'lanzou_provider.dart';
-import 'caiyun_provider.dart';
 
 class DriveProviderFactory {
   static final Map<DriveType, BaseDriveProvider> _cache = {};
@@ -20,7 +19,6 @@ class DriveProviderFactory {
       DriveType.quark => QuarkProvider(),
       DriveType.tianyi => TianyiProvider(),
       DriveType.lanzou => LanzouProvider(),
-      DriveType.caiyun => CaiyunProvider(),
     };
     _cache[type] = provider;
     return provider;

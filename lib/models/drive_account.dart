@@ -1,75 +1,150 @@
 import 'package:flutter/material.dart';
 
 enum DriveType {
-  baidu('百度网盘', 'https://pan.baidu.com', Icons.cloud, Color(0xFF2932E1)),
-  aliyun('阿里云盘', 'https://www.aliyundrive.com', Icons.cloud_circle, Color(0xFF6236FF)),
-  pan123('123云盘', 'https://www.123pan.com', Icons.storage, Color(0xFFFF6B35)),
-  quark('夸克网盘', 'https://pan.quark.cn', Icons.browser_updated, Color(0xFF2B85FF)),
-  tianyi('天翼云盘', 'https://cloud.189.cn', Icons.signal_cellular_alt, Color(0xFFFF4D4F)),
-  lanzou('蓝奏云', 'https://www.lanzou.com', Icons.upload_file, Color(0xFF00B96B)),
-  caiyun('和彩云', 'https://caiyun.feixin.10086.cn', Icons.wifi, Color(0xFF0085FF)),
-  ;
+  pan123,
+  lanzou,
+  baidu,
+  aliyun,
+  quark,
+  tianyi,
+}
 
-  final String label;
-  final String loginUrl;
-  final IconData icon;
-  final Color color;
-  const DriveType(this.label, this.loginUrl, this.icon, this.color);
+extension DriveTypeInfo on DriveType {
+  String get label {
+    switch (this) {
+      case DriveType.pan123:
+        return '123云盘';
+      case DriveType.lanzou:
+        return '蓝奏云';
+      case DriveType.baidu:
+        return '百度网盘';
+      case DriveType.aliyun:
+        return '阿里云盘';
+      case DriveType.quark:
+        return '夸克网盘';
+      case DriveType.tianyi:
+        return '天翼云盘';
+    }
+  }
+
+  String get loginUrl {
+    switch (this) {
+      case DriveType.pan123:
+        return 'https://www.123pan.com/';
+      case DriveType.lanzou:
+        return 'https://www.lanzou.com/';
+      case DriveType.baidu:
+        return 'https://pan.baidu.com/';
+      case DriveType.aliyun:
+        return 'https://www.aliyundrive.com/';
+      case DriveType.quark:
+        return 'https://pan.quark.cn/';
+      case DriveType.tianyi:
+        return 'https://cloud.189.cn/';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case DriveType.pan123:
+        return Icons.cloud;
+      case DriveType.lanzou:
+        return Icons.link;
+      case DriveType.baidu:
+        return Icons.folder;
+      case DriveType.aliyun:
+        return Icons.cloud_done;
+      case DriveType.quark:
+        return Icons.bolt;
+      case DriveType.tianyi:
+        return Icons.wifi;
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case DriveType.pan123:
+        return const Color(0xFF2196F3);
+      case DriveType.lanzou:
+        return const Color(0xFF00BCD4);
+      case DriveType.baidu:
+        return const Color(0xFF4CAF50);
+      case DriveType.aliyun:
+        return const Color(0xFFFF6B35);
+      case DriveType.quark:
+        return const Color(0xFF2B85FF);
+      case DriveType.tianyi:
+        return const Color(0xFFFF9800);
+    }
+  }
+
+  bool get supportsFileList {
+    switch (this) {
+      case DriveType.lanzou:
+        return false;
+      default:
+        return true;
+    }
+  }
+
+  bool get supportsPasswordLogin => this == DriveType.pan123;
+
+  bool get isParserOnly => this == DriveType.lanzou;
 }
 
 class DriveAccount {
   final String id;
   final DriveType type;
   final String displayName;
-  final String avatarUrl;
   final int usedSpace;
   final int totalSpace;
   final DateTime addedAt;
+  final Map<String, dynamic> credential;
 
   const DriveAccount({
     required this.id,
     required this.type,
     this.displayName = '',
-    this.avatarUrl = '',
     this.usedSpace = 0,
     this.totalSpace = 0,
     required this.addedAt,
+    this.credential = const {},
   });
 
   DriveAccount copyWith({
     String? displayName,
-    String? avatarUrl,
     int? usedSpace,
     int? totalSpace,
+    Map<String, dynamic>? credential,
   }) {
     return DriveAccount(
       id: id,
       type: type,
       displayName: displayName ?? this.displayName,
-      avatarUrl: avatarUrl ?? this.avatarUrl,
       usedSpace: usedSpace ?? this.usedSpace,
       totalSpace: totalSpace ?? this.totalSpace,
       addedAt: addedAt,
+      credential: credential ?? this.credential,
     );
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'type': type.name,
-    'displayName': displayName,
-    'avatarUrl': avatarUrl,
-    'usedSpace': usedSpace,
-    'totalSpace': totalSpace,
-    'addedAt': addedAt.toIso8601String(),
-  };
+        'id': id,
+        'type': type.index,
+        'displayName': displayName,
+        'usedSpace': usedSpace,
+        'totalSpace': totalSpace,
+        'addedAt': addedAt.toIso8601String(),
+        'credential': credential,
+      };
 
   factory DriveAccount.fromJson(Map<String, dynamic> json) => DriveAccount(
-    id: json['id'] as String,
-    type: DriveType.values.firstWhere((e) => e.name == json['type'], orElse: () => DriveType.baidu),
-    displayName: json['displayName'] as String? ?? '',
-    avatarUrl: json['avatarUrl'] as String? ?? '',
-    usedSpace: json['usedSpace'] as int? ?? 0,
-    totalSpace: json['totalSpace'] as int? ?? 0,
-    addedAt: DateTime.tryParse(json['addedAt'] as String? ?? '') ?? DateTime.now(),
-  );
+        id: json['id'] as String,
+        type: DriveType.values[json['type'] as int],
+        displayName: json['displayName'] as String? ?? '',
+        usedSpace: json['usedSpace'] as int? ?? 0,
+        totalSpace: json['totalSpace'] as int? ?? 0,
+        addedAt: DateTime.tryParse(json['addedAt'] as String? ?? '') ?? DateTime.now(),
+        credential: Map<String, dynamic>.from(json['credential'] as Map? ?? {}),
+      );
 }

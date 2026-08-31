@@ -5,7 +5,6 @@ import '../services/credential_storage.dart';
 import '../utils/format_utils.dart';
 import 'add_drive_screen.dart';
 import 'file_manager_screen.dart';
-import 'login_webview_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,18 +15,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CredentialStorage>().init();
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     final storage = context.watch<CredentialStorage>();
     final accounts = storage.accounts;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('PanPal', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -80,7 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
-        onTap: () => _openDrive(account),
+        onTap: account.type.supportsFileList ? () => _openDrive(account) : null,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -92,7 +82,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Container(
                     width: 48,
                     height: 48,
-                    decoration: BoxDecoration(color: account.type.color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                    decoration: BoxDecoration(
+                        color: account.type.color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
                     child: Icon(account.type.icon, color: account.type.color, size: 28),
                   ),
                   const SizedBox(width: 12),
@@ -102,24 +93,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Row(
                           children: [
-                            Text(account.type.label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            Text(account.type.label,
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                             const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(color: Colors.green.withOpacity(0.15), borderRadius: BorderRadius.circular(4)),
+                              decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.15), borderRadius: BorderRadius.circular(4)),
                               child: const Text('已登录', style: TextStyle(fontSize: 10, color: Colors.green)),
                             ),
                           ],
                         ),
                         const SizedBox(height: 2),
-                        Text(account.displayName.isEmpty ? account.type.label : account.displayName, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                        Text(account.displayName.isEmpty ? account.type.label : account.displayName,
+                            style: TextStyle(fontSize: 13, color: Colors.grey[600])),
                       ],
                     ),
                   ),
                   PopupMenuButton<String>(
                     onSelected: (v) => _handleMenu(v, account),
                     itemBuilder: (context) => [
-                      const PopupMenuItem(value: 'open', child: Text('打开')),
+                      if (account.type.supportsFileList) const PopupMenuItem(value: 'open', child: Text('打开')),
                       const PopupMenuItem(value: 'logout', child: Text('退出登录')),
                     ],
                   ),
@@ -129,10 +123,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 12),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(value: usedPercent, minHeight: 6, backgroundColor: Colors.grey[200]),
+                  child: LinearProgressIndicator(
+                      value: usedPercent, minHeight: 6, backgroundColor: Colors.grey[200]),
                 ),
                 const SizedBox(height: 6),
-                Text('${FormatUtils.fileSize(account.usedSpace)} / ${FormatUtils.fileSize(account.totalSpace)}', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text('${FormatUtils.fileSize(account.usedSpace)} / ${FormatUtils.fileSize(account.totalSpace)}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600])),
               ],
             ],
           ),

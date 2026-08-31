@@ -70,7 +70,7 @@ class ParserService {
       fileName = fileName.replaceAll(RegExp(r'[-_]?(网盘|云盘|分享).*$'), '').trim();
 
       // Try to find direct download URL in the page
-      final directMatch = RegExp(r'(https?://[^\s"\'<>]+\.(?:zip|rar|7z|apk|exe|mp4|mkv|mp3|flac|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|iso|img|tar|gz)[^\s"\'<>]*)',
+      final directMatch = RegExp(r"(https?://[^\s\"'<>]+\.(?:zip|rar|7z|apk|exe|mp4|mkv|mp3|flac|pdf|doc|docx|xls|xlsx|ppt|pptx|txt|iso|img|tar|gz)[^\s\"'<>]*)",
               caseSensitive: false)
           .firstMatch(html);
       if (directMatch != null) {
@@ -160,14 +160,14 @@ class ParserService {
     final str = size.toString();
     final match = RegExp(r'(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB|B)?', caseSensitive: false).firstMatch(str);
     if (match == null) return 0;
-    final num = double.parse(match.group(1)!);
+    final value = double.parse(match.group(1)!);
     final unit = (match.group(2) ?? 'B').toUpperCase();
     return switch (unit) {
-      'TB' => (num * 1024 * 1024 * 1024 * 1024).toInt(),
-      'GB' => (num * 1024 * 1024 * 1024).toInt(),
-      'MB' => (num * 1024 * 1024).toInt(),
-      'KB' => (num * 1024).toInt(),
-      _ => num.toInt(),
+      'TB' => (value * 1024 * 1024 * 1024 * 1024).toInt(),
+      'GB' => (value * 1024 * 1024 * 1024).toInt(),
+      'MB' => (value * 1024 * 1024).toInt(),
+      'KB' => (value * 1024).toInt(),
+      _ => value.toInt(),
     };
   }
 }

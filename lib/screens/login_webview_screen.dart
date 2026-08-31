@@ -47,25 +47,21 @@ class _LoginWebViewScreenState extends State<LoginWebViewScreen> {
   }
 
   Future<Map<String, dynamic>> _captureCredentials() async {
-    // Extract cookies using CookieManager
-    final cookieManager = WebViewCookieManager();
-    final cookies = await cookieManager.getCookies(Uri.parse(widget.driveType.loginUrl));
     final cookieMap = <String, String>{};
-    for (final c in cookies) {
-      cookieMap[c.name] = c.value;
-    }
 
-    // Also try document.cookie as fallback
+    // Extract cookies using document.cookie
     try {
-      final docCookie = await _controller.runJavaScriptReturningResult('document.cookie') as String? ?? '';
-      for (final pair in docCookie.split(';')) {
+      final docCookie = await _controller.runJavaScriptReturningResult('document.cookie');
+      var cookieStr = docCookie.toString();
+      if (cookieStr.startsWith('"') && cookieStr.endsWith('"')) {
+        cookieStr = cookieStr.substring(1, cookieStr.length - 1).replaceAll('\\"', '"');
+      }
+      for (final pair in cookieStr.split(';')) {
         final idx = pair.indexOf('=');
         if (idx > 0) {
           final key = pair.substring(0, idx).trim();
           final value = pair.substring(idx + 1).trim();
-          if (key.isNotEmpty && !cookieMap.containsKey(key)) {
-            cookieMap[key] = value;
-          }
+          if (key.isNotEmpty) cookieMap[key] = value;
         }
       }
     } catch (_) {}

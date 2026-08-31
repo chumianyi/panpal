@@ -1,0 +1,3 @@
+-keep class com.panpal.app.** { *; }
+-keep class io.flutter.** { *; }
+-keep class androidx.** { *; }

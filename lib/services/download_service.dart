@@ -172,7 +172,7 @@ class DownloadService extends ChangeNotifier {
       await for (final chunk in resp.data!.stream) {
         if (seg.cancelled) break;
         await raf.writeFrom(chunk);
-        seg.downloaded += chunk.length;
+        seg.downloaded += (chunk.length as int);
         _updateTaskProgress(task.id);
       }
       await raf.close();
